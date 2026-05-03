@@ -1,0 +1,204 @@
+class Trucky {
+    func init() {
+        self.theme_p = "#0f172a"
+        self.theme_s = "#3b82f6"
+        self.theme_a = "#38bdf8"
+        self.bg = "#ffffff"
+        self.bg_alt = "#f8fafc"
+        self.text_m = "#0f172a"
+        self.text_muted = "#64748b"
+        self.border = "#e2e8f0"
+        self.success = "#10b981"
+        self.error = "#ef4444"
+        self.warning = "#f59e0b"
+        self.info = "#0ea5e9"
+        self.radius = "8px"
+        self.shadow = "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)"
+    }
+
+    func page(title, content) {
+        var html = "<!DOCTYPE html><html><head><title>" + title + "</title>"
+        html = html + "<meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+        html = html + "<link rel='preconnect' href='https://fonts.googleapis.com'><link rel='preconnect' href='https://fonts.gstatic.com' crossorigin><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>"
+        var prism = "<link href='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css' rel='stylesheet' /><script src='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js'></script><script>Prism.languages.pitruck={'string':/\\x22[^\\x22\\r\\n]*\\x22/,'comment':/#.*/,'keyword':/\\b(?:var|func|class|if|elif|else|while|return|bring|match|self|init)\\b/,'boolean':/\\b(?:true|false|null)\\b/,'number':/\\b\\d+(?:\\.\\d+)?\\b/,'operator':/=>|[+\\-*\\/%<>=!]=?/,'punctuation':/[{}[\];(),.:]/,'function':/\\b[a-z_]\\w*(?=\\s*\\()/i};</script>"
+        html = html + prism
+        html = html + "<style>*,*::before,*::after{box-sizing:border-box} body { font-family: 'Plus Jakarta Sans', sans-serif; background: " + self.bg + "; color: " + self.text_m + "; margin: 0; line-height: 1.6; } a { text-decoration: none; color: inherit; } button, input, select, textarea { font-family: inherit; } .fade-in { animation: fadeIn 0.5s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }</style>"
+        html = html + "</head><body>" + content + "</body></html>"
+        return html
+    }
+
+    func attr(k, v) {
+        if v == "" { return "" }
+        return " " + k + "=\"" + v + "\""
+    }
+
+    func tag(n, c, s, a, content) {
+        return "<" + n + self.attr("class", c) + self.attr("style", s) + a + ">" + content + "</" + n + ">"
+    }
+
+    func tag_self(n, c, s, a) {
+        return "<" + n + self.attr("class", c) + self.attr("style", s) + a + " />"
+    }
+
+    func container(content) { return self.tag("div", "", "width:100%; max-width:1200px; margin:0 auto; padding:0 2rem;", "", content) }
+    func container_sm(content) { return self.tag("div", "", "width:100%; max-width:800px; margin:0 auto; padding:0 2rem;", "", content) }
+
+    func div(content) { return self.tag("div", "", "", "", content) }
+    func box(content, p, m, bg) { return self.tag("div", "", "padding:" + p + "; margin:" + m + "; background:" + bg + "; border-radius:" + self.radius + ";", "", content) }
+    
+    func grid(content, cols, gap) { return self.tag("div", "", "display:grid; grid-template-columns:repeat(" + cols + ", 1fr); gap:" + gap + ";", "", content) }
+    func grid_auto(content, min_w, gap) { return self.tag("div", "", "display:grid; grid-template-columns:repeat(auto-fit, minmax(" + min_w + ", 1fr)); gap:" + gap + ";", "", content) }
+    
+    func flex(content, dir, just, align, gap) { return self.tag("div", "", "display:flex; flex-direction:" + dir + "; justify-content:" + just + "; align-items:" + align + "; gap:" + gap + ";", "", content) }
+    func flex_row(content, gap) { return self.flex(content, "row", "flex-start", "center", gap) }
+    func flex_col(content, gap) { return self.flex(content, "column", "flex-start", "stretch", gap) }
+    func flex_between(content) { return self.flex(content, "row", "space-between", "center", "0") }
+    func flex_center(content) { return self.flex(content, "row", "center", "center", "0") }
+
+    func spacer(h) { return self.tag("div", "", "height:" + h + ";", "", "") }
+    func divider() { return self.tag_self("hr", "", "border:none; border-top:1px solid " + self.border + "; margin:2rem 0;", "") }
+
+    func h1(text) { return self.tag("h1", "", "font-size:3.5rem; font-weight:800; letter-spacing:-0.05em; margin:0 0 1.5rem 0; line-height:1.1;", "", text) }
+    func h2(text) { return self.tag("h2", "", "font-size:2.25rem; font-weight:700; letter-spacing:-0.02em; margin:2rem 0 1rem 0;", "", text) }
+    func h3(text) { return self.tag("h3", "", "font-size:1.5rem; font-weight:600; margin:1.5rem 0 0.75rem 0;", "", text) }
+    func h4(text) { return self.tag("h4", "", "font-size:1.25rem; font-weight:600; margin:1.25rem 0 0.5rem 0;", "", text) }
+    
+    func p(text) { return self.tag("p", "", "font-size:1rem; color:" + self.text_m + "; margin:0 0 1rem 0;", "", text) }
+    func p_lead(text) { return self.tag("p", "", "font-size:1.25rem; color:" + self.text_muted + "; margin:0 0 1.5rem 0;", "", text) }
+    func p_muted(text) { return self.tag("p", "", "font-size:0.875rem; color:" + self.text_muted + "; margin:0 0 1rem 0;", "", text) }
+    
+    func span(text) { return self.tag("span", "", "", "", text) }
+    
+    func link(text, url) { return self.tag("a", "", "color:" + self.theme_s + "; text-decoration:none; font-weight:500;", self.attr("href", url), text) }
+    
+    func blockquote(text) { return self.tag("blockquote", "", "border-left:4px solid " + self.theme_s + "; margin:1.5rem 0; padding:0.5rem 0 0.5rem 1.5rem; font-size:1.125rem; font-style:italic; color:" + self.text_muted + "; background:" + self.bg_alt + "; border-radius:0 " + self.radius + " " + self.radius + " 0;", "", text) }
+    func code(text) { return self.tag("code", "language-pitruck", "font-family:'JetBrains Mono', monospace; font-size:0.875em; background:" + self.bg_alt + "; color:" + self.theme_s + "; padding:0.2em 0.4em; border-radius:4px; border:1px solid " + self.border + ";", "", text) }
+    func pre(text) { return self.tag("pre", "", "font-family:'JetBrains Mono', monospace; font-size:0.875em; background:" + self.theme_p + "; color:" + self.bg + "; padding:1.5rem; border-radius:" + self.radius + "; overflow-x:auto; margin:1.5rem 0;", "", "<code class='language-pitruck'>" + text + "</code>") }
+
+    func _btn_base(text, bg, c, border, url) {
+        var s = "display:inline-flex; align-items:center; justify-content:center; padding:0.625rem 1.25rem; font-size:0.875rem; font-weight:600; border-radius:" + self.radius + "; cursor:pointer; transition:all 0.2s; border:" + border + "; background:" + bg + "; color:" + c + "; text-decoration:none;"
+        if url == "" {
+            return self.tag("button", "", s, "", text)
+        } else {
+            return self.tag("a", "", s, self.attr("href", url), text)
+        }
+    }
+    
+    func btn_primary(text, url) { return self._btn_base(text, self.theme_p, self.bg, "1px solid " + self.theme_p, url) }
+    func btn_secondary(text, url) { return self._btn_base(text, self.theme_s, self.bg, "1px solid " + self.theme_s, url) }
+    func btn_outline(text, url) { return self._btn_base(text, "transparent", self.theme_p, "1px solid " + self.theme_p, url) }
+    func btn_ghost(text, url) { return self._btn_base(text, "transparent", self.text_m, "1px solid transparent", url) }
+    func btn_danger(text, url) { return self._btn_base(text, self.error, self.bg, "1px solid " + self.error, url) }
+
+    func card(content) { return self.tag("div", "", "background:" + self.bg + "; border:1px solid " + self.border + "; border-radius:" + self.radius + "; box-shadow:" + self.shadow + "; overflow:hidden;", "", content) }
+    func card_body(content) { return self.tag("div", "", "padding:1.5rem;", "", content) }
+    func card_header(content) { return self.tag("div", "", "padding:1.25rem 1.5rem; border-bottom:1px solid " + self.border + "; background:" + self.bg_alt + "; font-weight:600;", "", content) }
+    func card_simple(title, text, btn_t, btn_u) {
+        var c = self.h3(title) + self.p(text)
+        if btn_t != "" { c = c + self.spacer("1rem") + self.btn_primary(btn_t, btn_u) }
+        return self.card(self.card_body(c))
+    }
+
+    func navbar(brand, links_html, cta_html) {
+        var inner = self.flex_between(
+            self.tag("div", "", "font-size:1.25rem; font-weight:800; color:" + self.theme_p + ";", "", brand) +
+            self.flex_row(links_html, "2rem") +
+            self.tag("div", "", "", "", cta_html)
+        )
+        return self.tag("nav", "", "background:rgba(255,255,255,0.9); backdrop-filter:blur(8px); border-bottom:1px solid " + self.border + "; padding:1rem 2rem; position:sticky; top:0; z-index:100;", "", self.container(inner))
+    }
+    func nav_item(text, url) { return self.tag("a", "", "font-size:0.875rem; font-weight:500; color:" + self.text_muted + "; text-decoration:none;", self.attr("href", url), text) }
+    func sidebar(content, width) { return self.tag("aside", "", "width:" + width + "; height:100vh; position:fixed; left:0; top:0; background:" + self.bg_alt + "; border-right:1px solid " + self.border + "; padding:2rem; overflow-y:auto;", "", content) }
+    func sidebar_layout(sidebar_c, main_c, width) { return self.tag("div", "", "display:flex; min-height:100vh;", "", self.sidebar(sidebar_c, width) + self.tag("main", "", "flex:1; margin-left:" + width + "; padding:2rem;", "", main_c)) }
+    
+    func breadcrumb_item(text, url, is_last) { 
+        if is_last == 1 { return self.span(text) }
+        return self.tag("a", "", "color:" + self.theme_s + ";", self.attr("href", url), text) + self.span(" / ")
+    }
+
+    func label(text, id) { return self.tag("label", "", "display:block; font-size:0.875rem; font-weight:600; margin-bottom:0.5rem; color:" + self.text_m + ";", self.attr("for", id), text) }
+    func _input_base(type, id, placeholder, val) { return self.tag_self("input", "", "width:100%; padding:0.625rem 1rem; font-size:0.875rem; border:1px solid " + self.border + "; border-radius:" + self.radius + "; background:" + self.bg + "; color:" + self.text_m + "; outline:none;", self.attr("type", type) + self.attr("id", id) + self.attr("placeholder", placeholder) + self.attr("value", val)) }
+    
+    func input_text(id, placeholder) { return self._input_base("text", id, placeholder, "") }
+    func input_email(id, placeholder) { return self._input_base("email", id, placeholder, "") }
+    func input_password(id, placeholder) { return self._input_base("password", id, placeholder, "") }
+    
+    func checkbox(id, label_text) { 
+        var inp = self.tag_self("input", "", "margin-right:0.5rem; width:1rem; height:1rem; cursor:pointer;", self.attr("type", "checkbox") + self.attr("id", id))
+        return self.tag("label", "", "display:flex; align-items:center; font-size:0.875rem; cursor:pointer; margin-bottom:0.5rem;", "", inp + label_text)
+    }
+    
+    func radio(name, id, label_text) {
+        var inp = self.tag_self("input", "", "margin-right:0.5rem; width:1rem; height:1rem; cursor:pointer;", self.attr("type", "radio") + self.attr("name", name) + self.attr("id", id))
+        return self.tag("label", "", "display:flex; align-items:center; font-size:0.875rem; cursor:pointer; margin-bottom:0.5rem;", "", inp + label_text)
+    }
+
+    func select(id, options_html) { return self.tag("select", "", "width:100%; padding:0.625rem 1rem; font-size:0.875rem; border:1px solid " + self.border + "; border-radius:" + self.radius + "; background:" + self.bg + "; color:" + self.text_m + "; outline:none; appearance:none;", self.attr("id", id), options_html) }
+    func option(val, text) { return self.tag("option", "", "", self.attr("value", val), text) }
+
+    func form_group(label_text, input_html) { return self.tag("div", "", "margin-bottom:1.5rem;", "", self.label(label_text, "") + input_html) }
+    func form(action, method, content) { return self.tag("form", "", "", self.attr("action", action) + self.attr("method", method), content) }
+
+    func badge_primary(text) { return self.tag("span", "", "display:inline-flex; align-items:center; justify-content:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.theme_p + "; color:" + self.bg + ";", "", text) }
+    func badge_success(text) { return self.tag("span", "", "display:inline-flex; align-items:center; justify-content:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.success + "20; color:" + self.success + ";", "", text) }
+    func badge_warning(text) { return self.tag("span", "", "display:inline-flex; align-items:center; justify-content:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.warning + "20; color:" + self.warning + ";", "", text) }
+
+    func alert_success(title, text) {
+        var c = self.tag("strong", "", "display:block; margin-bottom:0.25rem; font-size:0.875rem;", "", title) + self.tag("span", "", "font-size:0.875rem;", "", text)
+        return self.tag("div", "", "padding:1rem; border-radius:" + self.radius + "; border-left:4px solid " + self.success + "; background:" + self.success + "10; color:" + self.text_m + "; margin-bottom:1rem;", "", c)
+    }
+    func alert_error(title, text) {
+        var c = self.tag("strong", "", "display:block; margin-bottom:0.25rem; font-size:0.875rem;", "", title) + self.tag("span", "", "font-size:0.875rem;", "", text)
+        return self.tag("div", "", "padding:1rem; border-radius:" + self.radius + "; border-left:4px solid " + self.error + "; background:" + self.error + "10; color:" + self.text_m + "; margin-bottom:1rem;", "", c)
+    }
+
+    func progress_bar(percent, color) {
+        var bg = self.tag("div", "", "height:100%; border-radius:9999px; background:" + color + "; width:" + percent + "%; transition:width 0.5s ease;", "", "")
+        return self.tag("div", "", "width:100%; height:0.5rem; background:" + self.bg_alt + "; border-radius:9999px; overflow:hidden;", "", bg)
+    }
+
+    func tooltip(content, tip_text) {
+        var s = "position:relative; display:inline-block; cursor:help;"
+        var tip = "<span style='visibility:hidden; width:120px; background-color:#111827; color:#fff; text-align:center; border-radius:6px; padding:5px 0; position:absolute; z-index:1; bottom:125%; left:50%; margin-left:-60px; opacity:0; transition:opacity 0.3s; font-size:0.75rem; font-weight:500;'>" + tip_text + "</span>"
+        return "<div style='" + s + "' onmouseover='this.children[0].style.visibility=\"visible\";this.children[0].style.opacity=1;' onmouseout='this.children[0].style.visibility=\"hidden\";this.children[0].style.opacity=0;'>" + tip + content + "</div>"
+    }
+
+    func tabs(headers, contents, id_prefix) {
+        var s = "<style>.tab-content { display: none; padding: 1.5rem 0; } .tab-content.active { display: block; } .tab-btn { padding: 0.75rem 1.5rem; border: none; background: transparent; border-bottom: 2px solid transparent; cursor: pointer; font-weight: 600; color: " + self.text_muted + "; } .tab-btn.active { color: " + self.theme_s + "; border-bottom: 2px solid " + self.theme_s + "; }</style>"
+        var script = "<script>function showTab(id, max, prefix) { for(var i=0;i<max;i++) { document.getElementById(prefix + '-c-' + i).className='tab-content'; document.getElementById(prefix + '-b-' + i).className='tab-btn'; } document.getElementById(prefix + '-c-' + id).className='tab-content active'; document.getElementById(prefix + '-b-' + id).className='tab-btn active'; }</script>"
+        return s + script + self.tag("div", "", "border-bottom:1px solid " + self.border + "; display:flex;", "", headers) + self.tag("div", "", "", "", contents)
+    }
+
+    func accordion_simple(title, content) {
+        var s = "border:1px solid " + self.border + "; border-radius:" + self.radius + "; margin-bottom:0.5rem; overflow:hidden;"
+        return self.tag("details", "", s, "", self.tag("summary", "", "padding:1rem; font-weight:600; cursor:pointer; background:" + self.bg_alt + "; outline:none;", "", title) + self.tag("div", "", "padding:1rem; background:" + self.bg + "; border-top:1px solid " + self.border + ";", "", content))
+    }
+
+    func modal_simple(id, btn_text, title, content) {
+        var btn = "<button onclick='document.getElementById(\"" + id + "\").style.display=\"flex\"' style='padding:0.5rem 1rem; background:" + self.theme_p + "; color:white; border:none; border-radius:6px; cursor:pointer;'>" + btn_text + "</button>"
+        var m_style = "display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5); align-items:center; justify-content:center;"
+        var c_style = "background-color:" + self.bg + "; padding:2rem; border-radius:" + self.radius + "; width:90%; max-width:500px; position:relative;"
+        var close_btn = "<span onclick='document.getElementById(\"" + id + "\").style.display=\"none\"' style='position:absolute; top:1rem; right:1.5rem; font-size:1.5rem; font-weight:bold; cursor:pointer;'>&times;</span>"
+        var m_content = self.tag("div", "", c_style, "", close_btn + self.h3(title) + self.tag("div", "", "margin-top:1rem;", "", content))
+        return btn + self.tag("div", "", m_style, self.attr("id", id), m_content)
+    }
+
+    func doc_sidebar(links_html) {
+        return self.sidebar(self.h4("Documentation") + self.flex_col(links_html, "0.75rem"), "280px")
+    }
+
+    func code_window(title, code) {
+        var top = self.tag("div", "", "background:#1e293b; padding:0.5rem 1rem; border-radius:" + self.radius + " " + self.radius + " 0 0; display:flex; align-items:center; gap:0.5rem;", "", self.tag("div", "", "width:12px; height:12px; border-radius:50%; background:#ef4444;", "", "") + self.tag("div", "", "width:12px; height:12px; border-radius:50%; background:#f59e0b;", "", "") + self.tag("div", "", "width:12px; height:12px; border-radius:50%; background:#10b981;", "", "") + self.tag("span", "", "color:#94a3b8; font-family:'JetBrains Mono', monospace; font-size:0.75rem; margin-left:1rem;", "", title))
+        var pre_code = "<pre style='margin:0;padding:0;background:transparent;'><code class='language-pitruck'>" + code + "</code></pre>"
+        var bot = self.tag("div", "", "background:#2d2d2d; padding:1.5rem; border-radius:0 0 " + self.radius + " " + self.radius + "; overflow-x:auto; font-size:0.875rem;", "", pre_code)
+        return self.tag("div", "", "margin:1.5rem 0; box-shadow:" + self.shadow + ";", "", top + bot)
+    }
+
+    func _css_bars(v1, v2, v3) {
+        var s = "display:flex; align-items:flex-end; gap:0.5rem; height:150px; padding:1rem; background:" + self.bg_alt + "; border-radius:" + self.radius + ";"
+        var b1 = self.tag("div", "", "width:100%; background:" + self.theme_p + "; border-radius:4px 4px 0 0; height:" + v1 + "%;", "", "")
+        var b2 = self.tag("div", "", "width:100%; background:" + self.theme_s + "; border-radius:4px 4px 0 0; height:" + v2 + "%;", "", "")
+        var b3 = self.tag("div", "", "width:100%; background:" + self.theme_a + "; border-radius:4px 4px 0 0; height:" + v3 + "%;", "", "")
+        return self.tag("div", "", s, "", b1 + b2 + b3)
+    }
+}

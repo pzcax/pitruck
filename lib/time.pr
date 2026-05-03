@@ -1,0 +1,5 @@
+func now() 
+    return time()
+
+func sleep(ms) 
+    sys_sleep(ms)

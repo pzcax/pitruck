@@ -1,0 +1,28 @@
+var PI = 3.14159265359
+var E = 2.71828182846
+
+func abs(x) 
+    return math_abs(x)
+
+
+func sqrt(x) 
+    return math_sqrt(x)
+
+
+func pow(x, y) 
+    return math_pow(x, y)
+
+
+func max(a, b) 
+    if a > b 
+        return a
+    
+    return b
+
+
+func min(a, b) 
+    if a < b 
+        return a
+    
+    return b
+
