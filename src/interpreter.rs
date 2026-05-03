@@ -129,11 +129,14 @@ impl Interpreter {
                 if args.len() != 2 { return Some(Err(arity_err(2))); }
                 match (&args[0], &args[1]) {
                     (Value::Str(path), Value::Str(contents)) => {
-                        fs::write(path, contents).map_err(|e| PitruckError::RuntimeError {
-                            line,
-                            message: format!("could not write file: {e}"),
-                        }).expect("AHHH PANIC");
-                        Some(Ok(Value::Null))
+                        let p = std::path::Path::new(path);
+                        match fs::write(p, contents) {
+                            Ok(_) => Some(Ok(Value::Null)),
+                            Err(e) => Some(Err(PitruckError::RuntimeError {
+                                line,
+                                message: format!("could not write file '{}': {e}", path),
+                            })),
+                        }
                     }
                     _ => Some(Err(PitruckError::RuntimeError {
                         line,
@@ -145,11 +148,14 @@ impl Interpreter {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
                     Value::Str(path) => {
-                        let contents = fs::read_to_string(path).map_err(|e| PitruckError::RuntimeError {
-                            line,
-                            message: format!("could not read file: {e}"),
-                        }).expect("AHHH PANIC");
-                        Some(Ok(Value::Str(contents)))
+                        let p = std::path::Path::new(path);
+                        match fs::read_to_string(p) {
+                            Ok(contents) => Some(Ok(Value::Str(contents))),
+                            Err(e) => Some(Err(PitruckError::RuntimeError {
+                                line,
+                                message: format!("could not read file '{}': {e}", path),
+                            })),
+                        }
                     }
                     _ => Some(Err(PitruckError::RuntimeError {
                         line,
