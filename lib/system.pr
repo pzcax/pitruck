@@ -9,3 +9,9 @@ func exit(code)
 
 func get_env(key) 
     return sys_env(key)
+
+func write_file(path, contents)
+    sys_writefile(path,contents)
+
+func read_file(path)
+    sys_readfile(path)

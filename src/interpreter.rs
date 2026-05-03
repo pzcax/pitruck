@@ -125,6 +125,38 @@ impl Interpreter {
                 };
                 Some(Ok(Value::Str(val)))
             }
+            "sys_writefile" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match (&args[0], &args[1]) {
+                    (Value::Str(path), Value::Str(contents)) => {
+                        fs::write(path, contents).map_err(|e| PitruckError::RuntimeError {
+                            line,
+                            message: format!("could not write file: {e}"),
+                        }).expect("AHHH PANIC");
+                        Some(Ok(Value::Null))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError {
+                        line,
+                        message: "sys_writefile requires two strings".to_string(),
+                    })),
+                }
+            }
+            "sys_readfile" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(path) => {
+                        let contents = fs::read_to_string(path).map_err(|e| PitruckError::RuntimeError {
+                            line,
+                            message: format!("could not read file: {e}"),
+                        }).expect("AHHH PANIC");
+                        Some(Ok(Value::Str(contents)))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError {
+                        line,
+                        message: "sys_readfile requires a string".to_string(),
+                    })),
+                }
+            }
             "math_abs" => {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
