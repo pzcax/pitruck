@@ -122,7 +122,7 @@ fn repl() {
     let stdin  = io::stdin();
     let stdout = io::stdout();
 
-    println!("Pitruck v0.1 - type 'exit' to quit");
+    println!("Pitruck v1.2 - type 'exit' to quit");
 
     let mut vm = Interpreter::new();
 
@@ -174,7 +174,7 @@ fn main() {
 
     match cmd {
         "--help" => {
-            println!("Pitruck Compiler v1.1");
+            println!("Pitruck Interpreter v1.2");
             println!("Usage: pitruck [command] [args]");
             println!("Commands:");
             println!("  [file.pr]                  Run a pitruck source file");
@@ -211,8 +211,8 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            println!("Pitruck Server  →  http://localhost:{}", port);
-            println!("Handler         →  {}", script_path);
+            println!("Pitruck Server  -  http://localhost:{}", port);
+            println!("Handler         -  {}", script_path);
 
             for stream in listener.incoming() {
                 if let Ok(mut stream) = stream {

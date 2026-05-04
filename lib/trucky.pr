@@ -201,4 +201,68 @@ class Trucky {
         var b3 = self.tag("div", "", "width:100%; background:" + self.theme_a + "; border-radius:4px 4px 0 0; height:" + v3 + "%;", "", "")
         return self.tag("div", "", s, "", b1 + b2 + b3)
     }
+
+    func table(headers_html, rows_html) {
+        var head = self.tag("thead", "", "", "", headers_html)
+        var body = self.tag("tbody", "", "", "", rows_html)
+        return self.tag("table", "", "width:100%; border-collapse:collapse; font-size:0.875rem;", "", head + body)
+    }
+
+    func th(text) {
+        return self.tag("th", "", "text-align:left; padding:0.75rem; border-bottom:1px solid " + self.border + ";", "", text)
+    }
+
+    func td(text) {
+        return self.tag("td", "", "padding:0.75rem; border-bottom:1px solid " + self.border + ";", "", text)
+    }
+
+    func ul(items_html) {
+        return self.tag("ul", "", "padding-left:1.25rem; margin:1rem 0;", "", items_html)
+    }
+
+    func li(text) {
+        return self.tag("li", "", "margin:0.25rem 0;", "", text)
+    }
+
+    func toast(id, text) {
+        var s = "position:fixed; bottom:1rem; right:1rem; background:" + self.theme_p + "; color:white; padding:0.75rem 1rem; border-radius:" + self.radius + "; box-shadow:" + self.shadow + "; display:none;"
+        var js = "<script>function showToast(){var t=document.getElementById('" + id + "');t.style.display='block';setTimeout(()=>t.style.display='none',3000);}</script>"
+        return js + self.tag("div", "", s, self.attr("id", id), text)
+    }
+
+    func spinner() {
+        return self.tag("div", "", "width:24px; height:24px; border:3px solid " + self.border + "; border-top:3px solid " + self.theme_p + "; border-radius:50%; animation:spin 1s linear infinite;", "", "") +
+        "<style>@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}</style>"
+    }
+
+    func skeleton(w, h) {
+        return self.tag("div", "", "width:" + w + "; height:" + h + "; background:linear-gradient(90deg," + self.bg_alt + ",#e2e8f0," + self.bg_alt + "); background-size:200% 100%; animation:shimmer 1.5s infinite;", "", "") +
+        "<style>@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>"
+    }
+
+    func hero(title, subtitle, btn_html) {
+        var c = self.h1(title) + self.p_lead(subtitle) + self.spacer("1.5rem") + btn_html
+        return self.tag("section", "", "padding:6rem 0; text-align:center;", "", self.container_sm(c))
+    }
+
+    func footer(text) {
+        return self.tag("footer", "", "padding:2rem; text-align:center; font-size:0.875rem; color:" + self.text_muted + "; border-top:1px solid " + self.border + "; margin-top:4rem;", "", text)
+    }
+
+    func pagination(current, total) {
+        var i = 1
+        var out = ""
+        while i <= total {
+            var style = "padding:0.5rem 0.75rem; margin:0 0.25rem; border:1px solid " + self.border + "; border-radius:6px;"
+            if i == current {
+                style = style + "background:" + self.theme_p + "; color:white;"
+            }
+            out = out + self.tag("a", "", style, self.attr("href", "?page=" + i), i)
+            i = i + 1
+        }
+        return self.flex_center(out)
+    }
+
+
 }
+
