@@ -48,18 +48,6 @@ impl Lexer {
         }
     }
 
-    fn consume_indent(&mut self) -> usize {
-        let mut level = 0usize;
-        while let Some(c) = self.peek() {
-            match c {
-                ' '  => { level += 1; self.advance(); }
-                '\t' => { level += 4; self.advance(); }
-                _    => break,
-            }
-        }
-        level
-    }
-
     fn next_token(&mut self) -> Result<(Token, usize, usize), PitruckError> {
         self.skip_inline_whitespace();
         let line = self.line;
