@@ -15,12 +15,11 @@ pub enum Signal {
 }
 
 pub struct Interpreter {
-    scopes:          Vec<HashMap<String, Value>>,
-    start:           Instant,
-    rand_seed:       u64,
-    loaded_modules:  HashSet<String>,
-
-    sandboxed:       bool,
+    scopes:         Vec<HashMap<String, Value>>,
+    start:          Instant,
+    rand_seed:      u64,
+    loaded_modules: HashSet<String>,
+    sandboxed:      bool,
 }
 
 impl Interpreter {
@@ -40,9 +39,7 @@ impl Interpreter {
         }
     }
 
-    pub fn set_sandboxed(&mut self, v: bool) {
-        self.sandboxed = v;
-    }
+    pub fn set_sandboxed(&mut self, v: bool) { self.sandboxed = v; }
 
     pub fn read_number(&self, name: &str) -> Option<f64> {
         for scope in self.scopes.iter().rev() {
@@ -129,6 +126,35 @@ impl Interpreter {
                 let r = (self.next_rand() % (b - a + 1) as u64) as i64 + a;
                 Some(Ok(Value::Number(r as f64)))
             }
+            "range" => {
+                // range(n) or range(start, stop) or range(start, stop, step)
+                let (start, stop, step) = match args.len() {
+                    1 => match &args[0] {
+                        Value::Number(n) => (0.0, *n, 1.0),
+                        _ => return Some(Err(PitruckError::RuntimeError { line, message: "range requires numbers".to_string() })),
+                    },
+                    2 => match (&args[0], &args[1]) {
+                        (Value::Number(a), Value::Number(b)) => (*a, *b, 1.0),
+                        _ => return Some(Err(PitruckError::RuntimeError { line, message: "range requires numbers".to_string() })),
+                    },
+                    3 => match (&args[0], &args[1], &args[2]) {
+                        (Value::Number(a), Value::Number(b), Value::Number(c)) => (*a, *b, *c),
+                        _ => return Some(Err(PitruckError::RuntimeError { line, message: "range requires numbers".to_string() })),
+                    },
+                    _ => return Some(Err(arity_err(1))),
+                };
+                if step == 0.0 {
+                    return Some(Err(PitruckError::RuntimeError { line, message: "range step cannot be zero".to_string() }));
+                }
+                let mut items = Vec::new();
+                let mut cur = start;
+                if step > 0.0 {
+                    while cur < stop { items.push(Value::Number(cur)); cur += step; }
+                } else {
+                    while cur > stop { items.push(Value::Number(cur)); cur += step; }
+                }
+                Some(Ok(Value::List(Rc::new(RefCell::new(items)))))
+            }
             "input" => {
                 if args.len() > 1 { return Some(Err(arity_err(1))); }
                 if let Some(Value::Str(prompt)) = args.first() {
@@ -200,10 +226,7 @@ impl Interpreter {
             "pop" => {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
-                    Value::List(l) => {
-                        let v = l.borrow_mut().pop().unwrap_or(Value::Null);
-                        Some(Ok(v))
-                    }
+                    Value::List(l) => Some(Ok(l.borrow_mut().pop().unwrap_or(Value::Null))),
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "pop requires a list".to_string() })),
                 }
             }
@@ -217,7 +240,30 @@ impl Interpreter {
                         let found = l.borrow().iter().any(|v| self.values_equal(v, needle));
                         Some(Ok(Value::Bool(found)))
                     }
-                    _ => Some(Err(PitruckError::RuntimeError { line, message: "contains requires (string, string) or (list, value)".to_string() })),
+                    (Value::Dict(d), Value::Str(key)) => {
+                        Some(Ok(Value::Bool(d.borrow().contains_key(key.as_str()))))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "contains requires (string, string), (list, value), or (dict, string)".to_string() })),
+                }
+            }
+            "keys" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Dict(d) => {
+                        let keys: Vec<Value> = d.borrow().keys().map(|k| Value::Str(k.clone())).collect();
+                        Some(Ok(Value::List(Rc::new(RefCell::new(keys)))))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "keys requires a dict".to_string() })),
+                }
+            }
+            "values" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Dict(d) => {
+                        let vals: Vec<Value> = d.borrow().values().cloned().collect();
+                        Some(Ok(Value::List(Rc::new(RefCell::new(vals)))))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "values requires a dict".to_string() })),
                 }
             }
             "split" => {
@@ -240,21 +286,21 @@ impl Interpreter {
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "join requires (list, string)".to_string() })),
                 }
             }
-            "trim" => {
+            "trim"    => {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
                     Value::Str(s) => Some(Ok(Value::Str(s.trim().to_string()))),
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "trim requires string".to_string() })),
                 }
             }
-            "upper" => {
+            "upper"   => {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
                     Value::Str(s) => Some(Ok(Value::Str(s.to_uppercase()))),
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "upper requires string".to_string() })),
                 }
             }
-            "lower" => {
+            "lower"   => {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
                     Value::Str(s) => Some(Ok(Value::Str(s.to_lowercase()))),
@@ -270,11 +316,63 @@ impl Interpreter {
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "replace requires (string, string, string)".to_string() })),
                 }
             }
-            "time" => {
+            "starts_with" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Str(prefix)) => Some(Ok(Value::Bool(s.starts_with(prefix.as_str())))),
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "starts_with requires (string, string)".to_string() })),
+                }
+            }
+            "ends_with" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Str(suffix)) => Some(Ok(Value::Bool(s.ends_with(suffix.as_str())))),
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "ends_with requires (string, string)".to_string() })),
+                }
+            }
+            "substr" => {
+                // substr(str, start) or substr(str, start, len)
+                if args.len() < 2 || args.len() > 3 { return Some(Err(arity_err(2))); }
+                match &args[0] {
+                    Value::Str(s) => {
+                        let chars: Vec<char> = s.chars().collect();
+                        let start = match &args[1] {
+                            Value::Number(n) => *n as usize,
+                            _ => return Some(Err(PitruckError::RuntimeError { line, message: "substr start must be a number".to_string() })),
+                        };
+                        let end = if args.len() == 3 {
+                            match &args[2] {
+                                Value::Number(n) => (start + *n as usize).min(chars.len()),
+                                _ => return Some(Err(PitruckError::RuntimeError { line, message: "substr length must be a number".to_string() })),
+                            }
+                        } else {
+                            chars.len()
+                        };
+                        let result: String = chars.get(start..end).unwrap_or(&[]).iter().collect();
+                        Some(Ok(Value::Str(result)))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "substr requires a string".to_string() })),
+                }
+            }
+            "char_at" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Number(n)) => {
+                        let i = *n as usize;
+                        let c = s.chars().nth(i);
+                        Some(Ok(match c {
+                            Some(ch) => Value::Str(ch.to_string()),
+                            None => Value::Null,
+                        }))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "char_at requires (string, number)".to_string() })),
+                }
+            }
+            "time"     => {
                 let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
                 Some(Ok(Value::Str(format!("{:02}:{:02}:{:02}", (secs / 3600) % 24, (secs % 3600) / 60, secs % 60))))
             }
-            "sys_os" => Some(Ok(Value::Str(std::env::consts::OS.to_string()))),
+            "sys_os"   => Some(Ok(Value::Str(std::env::consts::OS.to_string()))),
             "sys_exit" => {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 let code = match &args[0] { Value::Number(n) => *n as i32, _ => 0 };
@@ -296,9 +394,7 @@ impl Interpreter {
                 Some(Ok(Value::Str(val)))
             }
             "sys_writefile" => {
-                if self.sandboxed {
-                    return Some(Err(PitruckError::RuntimeError { line, message: "file I/O is not allowed in serve mode".to_string() }));
-                }
+                if self.sandboxed { return Some(Err(PitruckError::RuntimeError { line, message: "file I/O is not allowed in serve mode".to_string() })); }
                 if args.len() != 2 { return Some(Err(arity_err(2))); }
                 match (&args[0], &args[1]) {
                     (Value::Str(path), Value::Str(contents)) => {
@@ -311,9 +407,7 @@ impl Interpreter {
                 }
             }
             "sys_readfile" => {
-                if self.sandboxed {
-                    return Some(Err(PitruckError::RuntimeError { line, message: "file I/O is not allowed in serve mode".to_string() }));
-                }
+                if self.sandboxed { return Some(Err(PitruckError::RuntimeError { line, message: "file I/O is not allowed in serve mode".to_string() })); }
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
                     Value::Str(path) => {
@@ -339,7 +433,7 @@ impl Interpreter {
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "sqrt requires number".to_string() })),
                 }
             }
-            "math_pow" => {
+            "math_pow"  => {
                 if args.len() != 2 { return Some(Err(arity_err(2))); }
                 match (&args[0], &args[1]) {
                     (Value::Number(a), Value::Number(b)) => Some(Ok(Value::Number(a.powf(*b)))),
@@ -353,7 +447,7 @@ impl Interpreter {
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "floor requires number".to_string() })),
                 }
             }
-            "ceil" => {
+            "ceil"  => {
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
                     Value::Number(n) => Some(Ok(Value::Number(n.ceil()))),
@@ -414,12 +508,10 @@ impl Interpreter {
             Stmt::VarDecl { name, value, line } => {
                 let v = self.eval_expr(value)?;
                 match self.scopes.last_mut().unwrap().entry(name.to_string()) {
-                    Entry::Occupied(_) => {
-                        return Err(PitruckError::RuntimeError {
-                            line: *line,
-                            message: format!("'{name}' is already declared in this scope"),
-                        });
-                    }
+                    Entry::Occupied(_) => return Err(PitruckError::RuntimeError {
+                        line: *line,
+                        message: format!("'{name}' is already declared in this scope"),
+                    }),
                     Entry::Vacant(e) => { e.insert(v); }
                 }
                 Ok(Signal::None)
@@ -430,13 +522,20 @@ impl Interpreter {
                 Ok(Signal::None)
             }
             Stmt::Set { object, name, value, line } => {
+                // Evaluate object to get the Rc pointer to its fields, then mutate through it.
+                // This correctly handles self.field = x inside methods because `self` holds
+                // the same Rc<RefCell<...>> as the instance stored in the outer scope.
                 let obj = self.eval_expr(object)?;
                 let val = self.eval_expr(value)?;
-                if let Value::Instance { fields, .. } = obj {
-                    fields.borrow_mut().insert(name.clone(), val);
-                    Ok(Signal::None)
-                } else {
-                    Err(PitruckError::RuntimeError { line: *line, message: format!("cannot set property '{name}' on a non-instance value") })
+                match obj {
+                    Value::Instance { fields, .. } => {
+                        fields.borrow_mut().insert(name.clone(), val);
+                        Ok(Signal::None)
+                    }
+                    _ => Err(PitruckError::RuntimeError {
+                        line: *line,
+                        message: format!("cannot set property '{name}' on a non-instance value"),
+                    }),
                 }
             }
             Stmt::IndexSet { object, index, value, line } => {
@@ -455,12 +554,13 @@ impl Interpreter {
                         }
                     }
                     Value::Dict(dict) => {
-                        if let Value::Str(k) = idx {
-                            dict.borrow_mut().insert(k, val);
-                            Ok(Signal::None)
-                        } else {
-                            Err(PitruckError::RuntimeError { line: *line, message: "dict key must be a string".to_string() })
-                        }
+                        let k = match idx {
+                            Value::Str(s) => s,
+                            Value::Number(n) => format!("{}", n as i64),
+                            other => return Err(PitruckError::RuntimeError { line: *line, message: format!("dict key must be a string, got {}", other) }),
+                        };
+                        dict.borrow_mut().insert(k, val);
+                        Ok(Signal::None)
                     }
                     _ => Err(PitruckError::RuntimeError { line: *line, message: "can only index lists and dicts".to_string() }),
                 }
@@ -519,6 +619,27 @@ impl Interpreter {
                 }
                 Ok(Signal::None)
             }
+            Stmt::For { var, iter, body, line } => {
+                let iterable = self.eval_expr(iter)?;
+                let items = match iterable {
+                    Value::List(l) => l.borrow().clone(),
+                    Value::Str(s)  => s.chars().map(|c| Value::Str(c.to_string())).collect(),
+                    _ => return Err(PitruckError::RuntimeError {
+                        line: *line,
+                        message: "for-in requires a list or string".to_string(),
+                    }),
+                };
+                for item in items {
+                    self.push_scope();
+                    self.define(var, item);
+                    let sig = self.exec_block_in_current_scope(body)?;
+                    self.pop_scope();
+                    if let Signal::Return(v) = sig {
+                        return Ok(Signal::Return(v));
+                    }
+                }
+                Ok(Signal::None)
+            }
             Stmt::Match { expr, arms, default, .. } => {
                 let val = self.eval_expr(expr)?;
                 for (arm_expr, body) in arms {
@@ -561,13 +682,18 @@ impl Interpreter {
     #[inline]
     fn exec_block(&mut self, stmts: &[Stmt]) -> Result<Signal, PitruckError> {
         self.push_scope();
+        let result = self.exec_block_in_current_scope(stmts);
+        self.pop_scope();
+        result
+    }
+
+    // Runs stmts without pushing/popping a scope — used internally when the caller manages scope.
+    fn exec_block_in_current_scope(&mut self, stmts: &[Stmt]) -> Result<Signal, PitruckError> {
         for s in stmts {
             if let Signal::Return(v) = self.exec_stmt(s)? {
-                self.pop_scope();
                 return Ok(Signal::Return(v));
             }
         }
-        self.pop_scope();
         Ok(Signal::None)
     }
 
@@ -605,17 +731,19 @@ impl Interpreter {
 
             Expr::Get { object, name, line } => {
                 let obj = self.eval_expr(object)?;
-                if let Value::Instance { fields, methods, .. } = &obj {
-                    if let Some(val) = fields.borrow().get(name) { return Ok(val.clone()); }
-                    if let Some(method) = methods.get(name) {
-                        return Ok(Value::BoundMethod {
-                            receiver: Box::new(obj.clone()),
-                            method:   Box::new(method.clone()),
-                        });
+                match &obj {
+                    Value::Instance { fields, methods, .. } => {
+                        if let Some(val) = fields.borrow().get(name) { return Ok(val.clone()); }
+                        if let Some(method) = methods.get(name) {
+                            return Ok(Value::BoundMethod {
+                                receiver: Box::new(obj.clone()),
+                                method:   Box::new(method.clone()),
+                            });
+                        }
+                        Err(PitruckError::RuntimeError { line: *line, message: format!("property '{name}' not found on instance") })
                     }
-                    return Err(PitruckError::RuntimeError { line: *line, message: format!("property '{name}' not found on instance") });
+                    _ => Err(PitruckError::RuntimeError { line: *line, message: format!("cannot access property '{name}' on a non-instance value") }),
                 }
-                Err(PitruckError::RuntimeError { line: *line, message: format!("cannot access property '{name}' on a non-instance value") })
             }
 
             Expr::IndexGet { object, index, line } => {
@@ -633,13 +761,25 @@ impl Interpreter {
                         }
                     }
                     Value::Dict(dict) => {
-                        if let Value::Str(k) = idx {
-                            Ok(dict.borrow().get(&k).cloned().unwrap_or(Value::Null))
+                        let k = match idx {
+                            Value::Str(s) => s,
+                            Value::Number(n) => format!("{}", n as i64),
+                            other => return Err(PitruckError::RuntimeError { line: *line, message: format!("dict key must be a string, got {}", other) }),
+                        };
+                        Ok(dict.borrow().get(&k).cloned().unwrap_or(Value::Null))
+                    }
+                    Value::Str(s) => {
+                        if let Value::Number(n) = idx {
+                            let i = n as usize;
+                            match s.chars().nth(i) {
+                                Some(c) => Ok(Value::Str(c.to_string())),
+                                None    => Err(PitruckError::RuntimeError { line: *line, message: format!("string index {i} out of bounds (len {})", s.chars().count()) }),
+                            }
                         } else {
-                            Err(PitruckError::RuntimeError { line: *line, message: "dict key must be a string".to_string() })
+                            Err(PitruckError::RuntimeError { line: *line, message: "string index must be a number".to_string() })
                         }
                     }
-                    _ => Err(PitruckError::RuntimeError { line: *line, message: "can only index lists and dicts".to_string() }),
+                    _ => Err(PitruckError::RuntimeError { line: *line, message: "can only index strings, lists, and dicts".to_string() }),
                 }
             }
 
@@ -672,6 +812,7 @@ impl Interpreter {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for a in args { evaluated_args.push(self.eval_expr(a)?); }
 
+                // Fast path: check builtins by name before evaluating the callee as a value
                 if let Expr::Ident { name, .. } = &**callee {
                     if let Some(result) = self.call_builtin(name, &evaluated_args, *line) {
                         return result;
@@ -698,10 +839,12 @@ impl Interpreter {
                         Ok(ret)
                     }
                     Value::Class { name, methods } => {
+                        // Build the instance with a shared Rc so `init` mutations are visible
+                        let fields = Rc::new(RefCell::new(HashMap::new()));
                         let instance = Value::Instance {
                             class_name: name.clone(),
-                            fields:     Rc::new(RefCell::new(HashMap::new())),
-                            methods:    methods.clone(),
+                            fields: fields.clone(),
+                            methods: methods.clone(),
                         };
                         if let Some(Value::Function { params, body, .. }) = methods.get("init") {
                             if evaluated_args.len() != params.len() {
@@ -711,6 +854,7 @@ impl Interpreter {
                                 });
                             }
                             self.push_scope();
+                            // self shares the same Rc as `instance`, so self.field = x writes through
                             self.define("self", instance.clone());
                             for (p, arg) in params.iter().zip(evaluated_args) { self.define(p, arg); }
                             for s in body.iter() {

@@ -2,20 +2,15 @@ use crate::token::Token;
 use crate::error::PitruckError;
 
 pub struct Lexer {
-    source:          Vec<char>,
-    pos:             usize,
-    line:            usize,
-    col:             usize,
+    source: Vec<char>,
+    pos:    usize,
+    line:   usize,
+    col:    usize,
 }
 
 impl Lexer {
     pub fn new(source: &str) -> Self {
-        Lexer {
-            source:          source.chars().collect(),
-            pos:             0,
-            line:            1,
-            col:             1,
-        }
+        Lexer { source: source.chars().collect(), pos: 0, line: 1, col: 1 }
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<(Token, usize, usize)>, PitruckError> {
@@ -42,29 +37,23 @@ impl Lexer {
         c
     }
 
-    fn skip_inline_whitespace(&mut self) {
-        while matches!(self.peek(), Some(' ') | Some('\t') | Some('\r')) {
+    fn skip_whitespace(&mut self) {
+        while matches!(self.peek(), Some(' ') | Some('\t') | Some('\r') | Some('\n')) {
             self.advance();
         }
     }
 
     fn next_token(&mut self) -> Result<(Token, usize, usize), PitruckError> {
-        self.skip_inline_whitespace();
+        self.skip_whitespace();
         let line = self.line;
         let col  = self.col;
 
         match self.peek() {
-            None => {
-                Ok((Token::EOF, line, col))
-            }
+            None => Ok((Token::EOF, line, col)),
 
+            // Line comments (both # and //)
             Some('#') => {
                 while self.peek().is_some() && self.peek() != Some('\n') { self.advance(); }
-                self.next_token()
-            }
-
-            Some('\n') => {
-                self.advance();
                 self.next_token()
             }
 
@@ -73,7 +62,9 @@ impl Lexer {
                 let mut s = String::new();
                 loop {
                     match self.advance() {
-                        None | Some('\n') => return Err(PitruckError::LexError { line, col, message: "unterminated string literal".to_string() }),
+                        None | Some('\n') => return Err(PitruckError::LexError {
+                            line, col, message: "unterminated string literal".to_string(),
+                        }),
                         Some('"') => break,
                         Some('\\') => match self.advance() {
                             Some('n')  => s.push('\n'),
@@ -90,7 +81,9 @@ impl Lexer {
                                 else { s.push('x'); s.push_str(&hex); }
                             }
                             Some(c) => s.push(c),
-                            None => return Err(PitruckError::LexError { line, col, message: "unterminated escape".to_string() }),
+                            None => return Err(PitruckError::LexError {
+                                line, col, message: "unterminated escape".to_string(),
+                            }),
                         },
                         Some(c) => s.push(c),
                     }
@@ -108,7 +101,9 @@ impl Lexer {
                         has_dot = true; num.push(c); self.advance();
                     } else { break; }
                 }
-                let val: f64 = num.parse().map_err(|_| PitruckError::LexError { line, col, message: format!("invalid number '{num}'") })?;
+                let val: f64 = num.parse().map_err(|_| PitruckError::LexError {
+                    line, col, message: format!("invalid number '{num}'"),
+                })?;
                 Ok((Token::Number(val), line, col))
             }
 
@@ -127,6 +122,8 @@ impl Lexer {
                     "elif"   => Token::Elif,
                     "else"   => Token::Else,
                     "while"  => Token::While,
+                    "for"    => Token::For,
+                    "in"     => Token::In,
                     "print"  => Token::Print,
                     "and"    => Token::And,
                     "or"     => Token::Or,
@@ -156,22 +153,18 @@ impl Lexer {
                 }
             }
             Some('%') => { self.advance(); Ok((Token::Percent, line, col)) }
-            Some('{') | Some('[') | Some('(') => {
-                let c = self.advance().unwrap();
-                let tok = match c { '{' => Token::LBrace, '[' => Token::LBracket, '(' => Token::LParen, _ => unreachable!() };
-                Ok((tok, line, col))
-            }
-            Some('}') | Some(']') | Some(')') => {
-                let c = self.advance().unwrap();
-                let tok = match c { '}' => Token::RBrace, ']' => Token::RBracket, ')' => Token::RParen, _ => unreachable!() };
-                Ok((tok, line, col))
-            }
-            Some(',') => { self.advance(); Ok((Token::Comma,   line, col)) }
-            Some('.') => { self.advance(); Ok((Token::Dot,     line, col)) }
-            Some(':') => { self.advance(); Ok((Token::Colon,   line, col)) }
+            Some('{') => { self.advance(); Ok((Token::LBrace,   line, col)) }
+            Some('}') => { self.advance(); Ok((Token::RBrace,   line, col)) }
+            Some('(') => { self.advance(); Ok((Token::LParen,   line, col)) }
+            Some(')') => { self.advance(); Ok((Token::RParen,   line, col)) }
+            Some('[') => { self.advance(); Ok((Token::LBracket, line, col)) }
+            Some(']') => { self.advance(); Ok((Token::RBracket, line, col)) }
+            Some(',') => { self.advance(); Ok((Token::Comma,    line, col)) }
+            Some('.') => { self.advance(); Ok((Token::Dot,      line, col)) }
+            Some(':') => { self.advance(); Ok((Token::Colon,    line, col)) }
             Some('=') => {
                 self.advance();
-                if self.peek() == Some('=')      { self.advance(); Ok((Token::EqEq,    line, col)) }
+                if self.peek() == Some('=')      { self.advance(); Ok((Token::EqEq,     line, col)) }
                 else if self.peek() == Some('>') { self.advance(); Ok((Token::FatArrow, line, col)) }
                 else                             { Ok((Token::Eq, line, col)) }
             }

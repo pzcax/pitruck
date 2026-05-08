@@ -14,10 +14,11 @@ pub enum Stmt {
         else_branch:    Option<Vec<Stmt>>,
         line:           usize,
     },
-    While    { condition: Expr, body: Vec<Stmt>, line: usize },
-    Match    { expr: Expr, arms: Vec<(Expr, Vec<Stmt>)>, default: Option<Vec<Stmt>>, line: usize },
-    Return   { value: Option<Expr>, line: usize },
-    Print    { value: Expr, line: usize },
+    While  { condition: Expr, body: Vec<Stmt>, line: usize },
+    For    { var: String, iter: Expr, body: Vec<Stmt>, line: usize },
+    Match  { expr: Expr, arms: Vec<(Expr, Vec<Stmt>)>, default: Option<Vec<Stmt>>, line: usize },
+    Return { value: Option<Expr>, line: usize },
+    Print  { value: Expr, line: usize },
     ExprStmt { expr: Expr, line: usize },
 }
 

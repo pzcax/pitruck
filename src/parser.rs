@@ -3,8 +3,8 @@ use crate::ast::*;
 use crate::error::PitruckError;
 
 pub struct Parser {
-    tokens:     Vec<(Token, usize, usize)>,
-    pos:        usize,
+    tokens: Vec<(Token, usize, usize)>,
+    pos:    usize,
 }
 
 impl Parser {
@@ -51,30 +51,18 @@ impl Parser {
         let (line, col) = self.span();
         match self.peek().clone() {
             Token::Ident(name) => { self.advance(); Ok(name) }
-            other => Err(PitruckError::ParseError { line, col, message: format!("expected identifier, found `{}`", token_display(&other)) }),
+            other => Err(PitruckError::ParseError {
+                line, col,
+                message: format!("expected identifier, found `{}`", token_display(&other)),
+            }),
         }
     }
 
-
-
-    fn expect_stmt_end(&mut self) -> Result<(), PitruckError> {
-        let (line, col) = self.span();
-        match self.peek() {
-            Token::RBrace | Token::EOF => Ok(()), // Removed Newline and Dedent
-            Token::Var | Token::Bring | Token::Func | Token::If | Token::Elif | Token::Else
-            | Token::While | Token::Return | Token::Print | Token::Class | Token::Match
-            | Token::Ident(_) | Token::Self_ | Token::LBracket | Token::LBrace | Token::Comma => Ok(()),
-            other => {
-                let msg = format!("unexpected `{}` — did you forget a closing `)`?", token_display(other));
-                Err(PitruckError::ParseError { line, col, message: msg })
-            }
-        }
-    }
-
-    fn parse_block(&mut self) -> Result<Vec<Stmt>, PitruckError> {
-        let (line, col) = self.span();
+    // Parses either a `{ ... }` block or a single statement as a one-element vec.
+    // This makes `if cond stmt` and `if cond { stmt }` both valid.
+    fn parse_body(&mut self) -> Result<Vec<Stmt>, PitruckError> {
         if matches!(self.peek(), Token::LBrace) {
-            self.expect(&Token::LBrace)?;
+            self.advance();
             let mut stmts = Vec::new();
             while !matches!(self.peek(), Token::RBrace | Token::EOF) {
                 stmts.push(self.parse_stmt()?);
@@ -82,7 +70,7 @@ impl Parser {
             self.expect(&Token::RBrace)?;
             Ok(stmts)
         } else {
-            Err(PitruckError::ParseError { line, col, message: "expected a block enclosed in `{ ... }`".to_string() })
+            Ok(vec![self.parse_stmt()?])
         }
     }
 
@@ -94,13 +82,11 @@ impl Parser {
                 let name  = self.expect_ident()?;
                 self.expect(&Token::Eq)?;
                 let value = self.parse_expr()?;
-                self.expect_stmt_end()?;
                 Ok(Stmt::VarDecl { name, value, line })
             }
             Token::Bring => {
                 self.advance();
                 let module = self.expect_ident()?;
-                self.expect_stmt_end()?;
                 Ok(Stmt::Bring { module, line })
             }
             Token::Func => {
@@ -109,13 +95,27 @@ impl Parser {
                 self.expect(&Token::LParen)?;
                 let params = self.parse_params()?;
                 self.expect(&Token::RParen)?;
-                let body   = self.parse_block()?;
+                // Functions always require braces for clarity
+                let (bl, bc) = self.span();
+                if !matches!(self.peek(), Token::LBrace) {
+                    return Err(PitruckError::ParseError {
+                        line: bl, col: bc,
+                        message: "function body must be enclosed in `{ ... }`".to_string(),
+                    });
+                }
+                let body = self.parse_body()?;
                 Ok(Stmt::FuncDef { name, params, body, line })
             }
             Token::Class => {
                 self.advance();
-                let name    = self.expect_ident()?;
-                let methods = self.parse_block()?;
+                let name = self.expect_ident()?;
+                // Class bodies always require braces
+                self.expect(&Token::LBrace)?;
+                let mut methods = Vec::new();
+                while !matches!(self.peek(), Token::RBrace | Token::EOF) {
+                    methods.push(self.parse_stmt()?);
+                }
+                self.expect(&Token::RBrace)?;
                 Ok(Stmt::ClassDef { name, methods, line })
             }
             Token::Match => {
@@ -128,20 +128,16 @@ impl Parser {
                     if matches!(self.peek(), Token::Underscore) {
                         self.advance();
                         self.expect(&Token::FatArrow)?;
-                        let body = if matches!(self.peek(), Token::LBrace) {
-                            self.parse_block()?
-                        } else { vec![self.parse_stmt()?] };
+                        let body = self.parse_body()?;
                         default = Some(body);
-                        if matches!(self.peek(), Token::Comma) { self.advance(); }
                     } else {
                         let val = self.parse_expr()?;
                         self.expect(&Token::FatArrow)?;
-                        let body = if matches!(self.peek(), Token::LBrace) {
-                            self.parse_block()?
-                        } else { vec![self.parse_stmt()?] };
+                        let body = self.parse_body()?;
                         arms.push((val, body));
-                        if matches!(self.peek(), Token::Comma) { self.advance(); }
                     }
+                    // Optional comma between arms
+                    if matches!(self.peek(), Token::Comma) { self.advance(); }
                 }
                 self.expect(&Token::RBrace)?;
                 Ok(Stmt::Match { expr, arms, default, line })
@@ -149,36 +145,40 @@ impl Parser {
             Token::Return => {
                 self.advance();
                 let value = if self.is_expr_start() { Some(self.parse_expr()?) } else { None };
-                self.expect_stmt_end()?;
                 Ok(Stmt::Return { value, line })
             }
             Token::Print => {
                 self.advance();
                 let value = self.parse_expr()?;
-                self.expect_stmt_end()?;
                 Ok(Stmt::Print { value, line })
             }
             Token::If    => self.parse_if(),
             Token::While => {
                 self.advance();
                 let condition = self.parse_expr()?;
-                let body      = self.parse_block()?;
+                let body      = self.parse_body()?;
                 Ok(Stmt::While { condition, body, line })
+            }
+            Token::For => {
+                self.advance();
+                let var = self.expect_ident()?;
+                self.expect(&Token::In)?;
+                let iter = self.parse_expr()?;
+                let body = self.parse_body()?;
+                Ok(Stmt::For { var, iter, body, line })
             }
             _ => {
                 let expr = self.parse_expr()?;
                 if matches!(self.peek(), Token::Eq) {
                     self.advance();
                     let value = self.parse_expr()?;
-                    self.expect_stmt_end()?;
                     match expr {
-                        Expr::Ident { name, line }              => Ok(Stmt::Assign { name, value, line }),
-                        Expr::Get { object, name, line }        => Ok(Stmt::Set { object: *object, name, value, line }),
-                        Expr::IndexGet { object, index, line }  => Ok(Stmt::IndexSet { object: *object, index: *index, value, line }),
+                        Expr::Ident { name, line }             => Ok(Stmt::Assign { name, value, line }),
+                        Expr::Get { object, name, line }       => Ok(Stmt::Set { object: *object, name, value, line }),
+                        Expr::IndexGet { object, index, line } => Ok(Stmt::IndexSet { object: *object, index: *index, value, line }),
                         _ => Err(PitruckError::ParseError { line, col, message: "invalid assignment target".to_string() }),
                     }
                 } else {
-                    self.expect_stmt_end()?;
                     Ok(Stmt::ExprStmt { expr, line })
                 }
             }
@@ -187,20 +187,20 @@ impl Parser {
 
     fn parse_if(&mut self) -> Result<Stmt, PitruckError> {
         let (line, _) = self.span();
-        self.advance();
+        self.advance(); // consume `if`
         let condition   = self.parse_expr()?;
-        let then_branch = self.parse_block()?;
+        let then_branch = self.parse_body()?;
         let mut elif_branches = Vec::new();
         let mut else_branch   = None;
         loop {
             if matches!(self.peek(), Token::Elif) {
                 self.advance();
                 let cond  = self.parse_expr()?;
-                let block = self.parse_block()?;
+                let block = self.parse_body()?;
                 elif_branches.push((cond, block));
             } else if matches!(self.peek(), Token::Else) {
                 self.advance();
-                else_branch = Some(self.parse_block()?);
+                else_branch = Some(self.parse_body()?);
                 break;
             } else {
                 break;
@@ -215,6 +215,7 @@ impl Parser {
         params.push(self.expect_ident()?);
         while matches!(self.peek(), Token::Comma) {
             self.advance();
+            if matches!(self.peek(), Token::RParen) { break; }
             params.push(self.expect_ident()?);
         }
         Ok(params)
@@ -223,10 +224,10 @@ impl Parser {
     fn is_expr_start(&self) -> bool {
         matches!(
             self.peek(),
-            Token::Number(_) | Token::StringLit(_) | Token::True
-            | Token::False   | Token::Null          | Token::Ident(_)
-            | Token::LParen  | Token::Minus         | Token::Not
-            | Token::LBracket| Token::LBrace        | Token::Self_
+            Token::Number(_) | Token::StringLit(_) | Token::True  | Token::False
+            | Token::Null    | Token::Ident(_)      | Token::LParen
+            | Token::Minus   | Token::Not            | Token::LBracket
+            | Token::LBrace  | Token::Self_
         )
     }
 
@@ -380,7 +381,7 @@ impl Parser {
             self.expect(&Token::RParen)?;
             self.expect(&Token::FatArrow)?;
             let body = if matches!(self.peek(), Token::LBrace) {
-                self.parse_block()?
+                self.parse_body()?
             } else {
                 let e = self.parse_expr()?;
                 vec![Stmt::Return { value: Some(e), line }]
@@ -469,6 +470,8 @@ fn token_display(t: &Token) -> String {
         Token::Elif         => "elif".to_string(),
         Token::Else         => "else".to_string(),
         Token::While        => "while".to_string(),
+        Token::For          => "for".to_string(),
+        Token::In           => "in".to_string(),
         Token::Print        => "print".to_string(),
         Token::Class        => "class".to_string(),
         Token::Self_        => "self".to_string(),

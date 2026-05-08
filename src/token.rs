@@ -12,6 +12,8 @@ pub enum Token {
     Elif,
     Else,
     While,
+    For,
+    In,
     Print,
     Class,
     Self_,
