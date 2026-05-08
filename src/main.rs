@@ -226,7 +226,7 @@ fn read_http_request(stream: &mut std::net::TcpStream) -> String {
                 if let Some(header_end) = find_header_end(&buf) {
                     let header_str = String::from_utf8_lossy(&buf[..header_end]);
                     if let Some(len) = parse_content_length(&header_str) {
-                        let total = header_end + 4 + len; 
+                        let total = header_end + 4 + len;
                         if buf.len() >= total { break; }
                     } else {
                         break;

@@ -1,5 +1,7 @@
-func now() 
+func now() {
     return time()
+}
 
-func sleep(ms) 
+func sleep(ms) {
     sys_sleep(ms)
+}

@@ -1,17 +1,23 @@
-func os() 
+func os() {
     return sys_os()
+}
 
-func clear_screen() 
+func clear_screen() {
     clear()
+}
 
-func exit(code) 
+func exit(code) {
     sys_exit(code)
+}
 
-func get_env(key) 
+func get_env(key) {
     return sys_env(key)
+}
 
-func write_file(path, contents)
+func write_file(path, contents) {
     return sys_writefile(path,contents)
+}
 
-func read_file(path)
+func read_file(path) {
     return sys_readfile(path)
+}

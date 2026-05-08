@@ -1,38 +1,51 @@
-func red(text) 
+func red(text) {
     return "\x1b[31m" + text + "\x1b[0m"
+}
 
-func green(text) 
+func green(text) {
     return "\x1b[32m" + text + "\x1b[0m"
+}
 
-func blue(text) 
+func blue(text) {
     return "\x1b[34m" + text + "\x1b[0m"
+}
 
-func yellow(text) 
+func yellow(text) {
     return "\x1b[33m" + text + "\x1b[0m"
+}
 
-func cyan(text) 
+func cyan(text) {
     return "\x1b[36m" + text + "\x1b[0m"
+}
 
-func magenta(text) 
+func magenta(text) {
     return "\x1b[35m" + text + "\x1b[0m"
+}
 
-func white(text) 
+func white(text) {
     return "\x1b[37m" + text + "\x1b[0m"
+}
 
-func black(text) 
+func black(text) {
     return "\x1b[30m" + text + "\x1b[0m"
+}
 
-func bg_red(text) 
+func bg_red(text) {
     return "\x1b[41m" + text + "\x1b[0m"
+}
 
-func bg_green(text) 
+func bg_green(text) {
     return "\x1b[42m" + text + "\x1b[0m"
+}
 
-func bg_blue(text) 
+func bg_blue(text) {
     return "\x1b[44m" + text + "\x1b[0m"
+}
 
-func bold(text) 
+func bold(text) {
     return "\x1b[1m" + text + "\x1b[0m"
+}
 
-func underline(text) 
+func underline(text) {
     return "\x1b[4m" + text + "\x1b[0m"
+}

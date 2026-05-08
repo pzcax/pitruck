@@ -1,23 +1,29 @@
-func inc(x)
+func inc(x) {
     return x+1
+}
 
-func abs(x) 
+func abs(x) {
     return math_abs(x)
+}
 
-func sqrt(x) 
+func sqrt(x) {
     return math_sqrt(x)
+}
 
-func pow(x, y) 
+func pow(x, y) {
     return math_pow(x, y)
+}
 
-func max(a, b) 
+func max(a, b) {
     if a > b 
         return a
     
     return b
+}
 
-func min(a, b) 
+func min(a, b) {
     if a < b 
         return a
     
     return b
+}
