@@ -50,8 +50,7 @@ impl Lexer {
 
         match self.peek() {
             None => Ok((Token::EOF, line, col)),
-
-            // Line comments (both # and //)
+            
             Some('#') => {
                 while self.peek().is_some() && self.peek() != Some('\n') { self.advance(); }
                 self.next_token()

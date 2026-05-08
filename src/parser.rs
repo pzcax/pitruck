@@ -57,9 +57,7 @@ impl Parser {
             }),
         }
     }
-
-    // Parses either a `{ ... }` block or a single statement as a one-element vec.
-    // This makes `if cond stmt` and `if cond { stmt }` both valid.
+    
     fn parse_body(&mut self) -> Result<Vec<Stmt>, PitruckError> {
         if matches!(self.peek(), Token::LBrace) {
             self.advance();
@@ -95,7 +93,6 @@ impl Parser {
                 self.expect(&Token::LParen)?;
                 let params = self.parse_params()?;
                 self.expect(&Token::RParen)?;
-                // Functions always require braces for clarity
                 let (bl, bc) = self.span();
                 if !matches!(self.peek(), Token::LBrace) {
                     return Err(PitruckError::ParseError {
@@ -109,7 +106,6 @@ impl Parser {
             Token::Class => {
                 self.advance();
                 let name = self.expect_ident()?;
-                // Class bodies always require braces
                 self.expect(&Token::LBrace)?;
                 let mut methods = Vec::new();
                 while !matches!(self.peek(), Token::RBrace | Token::EOF) {
@@ -136,7 +132,6 @@ impl Parser {
                         let body = self.parse_body()?;
                         arms.push((val, body));
                     }
-                    // Optional comma between arms
                     if matches!(self.peek(), Token::Comma) { self.advance(); }
                 }
                 self.expect(&Token::RBrace)?;
@@ -187,7 +182,7 @@ impl Parser {
 
     fn parse_if(&mut self) -> Result<Stmt, PitruckError> {
         let (line, _) = self.span();
-        self.advance(); // consume `if`
+        self.advance(); 
         let condition   = self.parse_expr()?;
         let then_branch = self.parse_body()?;
         let mut elif_branches = Vec::new();

@@ -305,13 +305,13 @@ fn main() {
 
             let is_dir = fs::metadata(target).map(|m| m.is_dir()).unwrap_or(false);
 
-            println!("Pitruck Server  →  http://localhost:{}", port);
+            println!("Pitruck Server  -  http://localhost:{}", port);
             if is_dir {
-                println!("Routing         →  {} (file-based)", target);
+                println!("Routing         -  {} (file-based)", target);
             } else {
-                println!("Handler         →  {}", target);
+                println!("Handler         -  {}", target);
             }
-            if debug { println!("Mode            →  debug"); }
+            if debug { println!("Mode            -  debug"); }
 
             for stream in listener.incoming() {
                 let mut stream = match stream {

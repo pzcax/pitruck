@@ -127,7 +127,6 @@ impl Interpreter {
                 Some(Ok(Value::Number(r as f64)))
             }
             "range" => {
-                // range(n) or range(start, stop) or range(start, stop, step)
                 let (start, stop, step) = match args.len() {
                     1 => match &args[0] {
                         Value::Number(n) => (0.0, *n, 1.0),
@@ -331,7 +330,6 @@ impl Interpreter {
                 }
             }
             "substr" => {
-                // substr(str, start) or substr(str, start, len)
                 if args.len() < 2 || args.len() > 3 { return Some(Err(arity_err(2))); }
                 match &args[0] {
                     Value::Str(s) => {
@@ -522,9 +520,6 @@ impl Interpreter {
                 Ok(Signal::None)
             }
             Stmt::Set { object, name, value, line } => {
-                // Evaluate object to get the Rc pointer to its fields, then mutate through it.
-                // This correctly handles self.field = x inside methods because `self` holds
-                // the same Rc<RefCell<...>> as the instance stored in the outer scope.
                 let obj = self.eval_expr(object)?;
                 let val = self.eval_expr(value)?;
                 match obj {
@@ -686,8 +681,7 @@ impl Interpreter {
         self.pop_scope();
         result
     }
-
-    // Runs stmts without pushing/popping a scope — used internally when the caller manages scope.
+    
     fn exec_block_in_current_scope(&mut self, stmts: &[Stmt]) -> Result<Signal, PitruckError> {
         for s in stmts {
             if let Signal::Return(v) = self.exec_stmt(s)? {
@@ -811,8 +805,7 @@ impl Interpreter {
             Expr::Call { callee, args, line } => {
                 let mut evaluated_args = Vec::with_capacity(args.len());
                 for a in args { evaluated_args.push(self.eval_expr(a)?); }
-
-                // Fast path: check builtins by name before evaluating the callee as a value
+                
                 if let Expr::Ident { name, .. } = &**callee {
                     if let Some(result) = self.call_builtin(name, &evaluated_args, *line) {
                         return result;
@@ -839,7 +832,6 @@ impl Interpreter {
                         Ok(ret)
                     }
                     Value::Class { name, methods } => {
-                        // Build the instance with a shared Rc so `init` mutations are visible
                         let fields = Rc::new(RefCell::new(HashMap::new()));
                         let instance = Value::Instance {
                             class_name: name.clone(),
@@ -854,7 +846,6 @@ impl Interpreter {
                                 });
                             }
                             self.push_scope();
-                            // self shares the same Rc as `instance`, so self.field = x writes through
                             self.define("self", instance.clone());
                             for (p, arg) in params.iter().zip(evaluated_args) { self.define(p, arg); }
                             for s in body.iter() {
