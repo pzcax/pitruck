@@ -1,7 +1,6 @@
 @echo off
 
 IF NOT EXIST "Cargo.toml" (
-    echo Making Cargo.toml...
 
     (
         echo [package]
