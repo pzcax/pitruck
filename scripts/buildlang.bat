@@ -1,7 +1,7 @@
 @echo off
 
 IF NOT EXIST "Cargo.toml" (
-    echo making Cargo.toml...
+    echo Making Cargo.toml...
 
     (
         echo [package]
@@ -12,6 +12,5 @@ IF NOT EXIST "Cargo.toml" (
         echo [dependencies]
     ) > Cargo.toml
 )
-
 set RUSTFLAGS=-Awarnings
 cargo build --release --quiet
