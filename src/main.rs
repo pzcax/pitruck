@@ -265,7 +265,7 @@ fn main() {
 
     match args[1].as_str() {
         "--help" => {
-            println!("Pitruck Interpreter v1.3");
+            println!("Pitruck v1.3");
             println!("Usage: pitruck [command] [args]");
             println!();
             println!("Commands:");
