@@ -689,7 +689,8 @@ impl Interpreter {
                 let mut lexer  = crate::lexer::Lexer::new(&source);
                 let tokens     = lexer.tokenize()?;
                 let mut parser = crate::parser::Parser::new(tokens);
-                let program    = parser.parse_program()?;
+                let mut program = parser.parse_program()?;
+                crate::compiler::resolve_program(&mut program);
                 self.run(&program)?;
 
                 self.script_dir = saved_script_dir;

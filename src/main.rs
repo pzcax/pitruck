@@ -6,6 +6,7 @@ mod parser;
 mod value;
 mod interpreter;
 mod symbol;
+mod compiler;
 
 use std::env;
 use std::fs;
@@ -29,10 +30,11 @@ fn run_source(source: &str, script_path: Option<&str>, show_perf: bool) -> bool 
 
     let t1 = Instant::now();
     let mut par = Parser::new(tokens);
-    let program = match par.parse_program() {
+    let mut program = match par.parse_program() {
         Ok(p)  => p,
         Err(e) => { eprintln!("{e}"); return false; }
     };
+    compiler::resolve_program(&mut program);
     let parse_ms = t1.elapsed();
 
     let t2 = Instant::now();
@@ -145,13 +147,14 @@ var response = __Response()
     };
 
     let mut par = Parser::new(tokens);
-    let program = match par.parse_program() {
+    let mut program = match par.parse_program() {
         Ok(p)  => p,
         Err(e) => {
             if debug { eprintln!("[pitruck] parse error: {e}"); }
             return (500, format!("<pre>Parse Error\n{e}</pre>"), vec![]);
         }
     };
+    compiler::resolve_program(&mut program);
 
     let mut vm = Interpreter::new();
     if let Some(sp) = script_path {
@@ -208,10 +211,11 @@ fn repl() {
         };
 
         let mut par = Parser::new(tokens);
-        let program = match par.parse_program() {
+        let mut program = match par.parse_program() {
             Ok(p)  => p,
             Err(e) => { eprintln!("{e}"); continue; }
         };
+        compiler::resolve_program(&mut program);
 
         if let Err(e) = vm.run(&program) {
             eprintln!("{e}");
