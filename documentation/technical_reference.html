@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pitruck 1.5 - Technical Reference</title>
+    <style>
+        :root {
+            --bg: #f8f9fa;
+            --text: #212529;
+            --sidebar-bg: #e9ecef;
+            --sidebar-border: #dee2e6;
+            --link: #0366d6;
+            --code-bg: #2d2d2d;
+            --code-text: #ccc;
+            --heading: #343a40;
+            --border: #ced4da;
+            --accent: #e83e8c;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+            margin: 0;
+            display: flex;
+        }
+
+        nav {
+            width: 250px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--sidebar-border);
+            padding: 2rem 1rem;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        nav h2 {
+            font-size: 1.2rem;
+            margin-top: 0;
+            color: var(--heading);
+        }
+
+        nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        nav li { margin-bottom: 0.5rem; }
+
+        nav a {
+            text-decoration: none;
+            color: var(--text);
+            font-size: 0.95rem;
+            display: block;
+            padding: 0.2rem 0;
+        }
+
+        nav a:hover {
+            color: var(--link);
+        }
+
+        main {
+            margin-left: 250px;
+            padding: 3rem 4rem;
+            max-width: 900px;
+            box-sizing: border-box;
+        }
+
+        h1, h2, h3, h4 { color: var(--heading); margin-top: 2rem; }
+        h1 { font-size: 2.5rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; margin-top: 0;}
+        h2 { font-size: 1.8rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+        h3 { font-size: 1.4rem; }
+
+        code {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            background: #eef1f5;
+            padding: 0.15rem 0.3rem;
+            border-radius: 3px;
+            font-size: 0.9em;
+            color: var(--accent);
+        }
+
+        pre {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.95rem;
+            line-height: 1.45;
+        }
+
+        pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+
+        th { background: var(--sidebar-bg); }
+
+        .note {
+            background: #e7f5ff;
+            border-left: 4px solid #339af0;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .warning {
+            background: #fff5f5;
+            border-left: 4px solid #fa5252;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 0 4px 4px 0;
+        }
+
+        @media (max-width: 768px) {
+            nav { display: none; }
+            main { margin-left: 0; padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <h2>Pitruck 1.5</h2>
+    <ul>
+        <li><a href="#intro">Introduction</a></li>
+        <li><a href="#getting-started">Getting Started</a></li>
+        <li><a href="#lexical">Lexical Structure</a></li>
+        <li><a href="#types">Data Types</a></li>
+        <li><a href="#variables">Variables</a></li>
+        <li><a href="#operators">Operators</a></li>
+        <li><a href="#control-flow">Control Flow</a></li>
+        <li><a href="#functions">Functions</a></li>
+        <li><a href="#classes">Classes</a></li>
+        <li><a href="#modules">Modules & Imports</a></li>
+        <li><a href="#error-handling">Error Handling</a></li>
+        <li><a href="#http-server">HTTP Web Server</a></li>
+        <li><a href="#stdlib">Standard Library</a></li>
+        <li><a href="#internals">Runtime Internals</a></li>
+    </ul>
+</nav>
+
+<main>
+    <section id="intro">
+        <h1>Pitruck 1.5 Technical Reference</h1>
+        <p>Pitruck is a dynamically-typed, interpreted scripting language implemented in Rust. It features a lightweight, C-style syntax with modern conveniences like optional chaining, null-coalescing, pattern matching, template strings, and first-class functions.</p>
+        <p>A major feature of Pitruck is its built-in HTTP server capabilities, allowing scripts to be instantly served as web endpoints with zero external dependencies.</p>
+        <p>This reference is made by AI.</p>
+    </section>
+
+    <section id="getting-started">
+        <h2>Getting Started</h2>
+        <p>Pitruck source files use the <code>.pr</code> extension.</p>
+
+        <h3>Hello World</h3>
+        <pre><code>print "Hello, World!"</code></pre>
+
+        <h3>CLI Usage</h3>
+        <p>The Pitruck executable provides a REPL, script runner, package manager, and a web server:</p>
+        <pre><code>pitruck                             # Start the interactive REPL
+pitruck script.pr                   # Run a source file
+pitruck script.pr --speed           # Run and show execution timing (lex, parse, run)
+pitruck --serve script.pr           # Serve script.pr as an HTTP handler (port 8000)
+pitruck --serve public/ --port 8080 # Serve a directory using file-based routing
+pitruck lib install &lt;url&gt;           # Download and install a library
+pitruck lib list                    # List installed libraries
+pitruck lib delete &lt;name&gt;           # Remove an installed library</code></pre>
+    </section>
+
+    <section id="lexical">
+        <h2>Lexical Structure</h2>
+
+        <h3>Comments</h3>
+        <p>Pitruck supports three comment styles:</p>
+        <pre><code># Python-style single-line comment
+// C-style single-line comment
+/* Multi-line 
+   block comment 
+*/</code></pre>
+
+        <h3>Identifiers</h3>
+        <p>Identifiers must begin with a letter or underscore <code>_</code> and can contain letters, numbers, and underscores.</p>
+
+        <h3>Keywords</h3>
+        <p>The following words are reserved and cannot be used as identifiers:</p>
+        <p><code>var</code>, <code>bring</code>, <code>func</code>, <code>return</code>, <code>if</code>, <code>elif</code>, <code>else</code>, <code>while</code>, <code>for</code>, <code>in</code>, <code>print</code>, <code>class</code>, <code>self</code>, <code>match</code>, <code>break</code>, <code>continue</code>, <code>try</code>, <code>catch</code>, <code>and</code>, <code>or</code>, <code>not</code>, <code>true</code>, <code>false</code>, <code>null</code>.</p>
+
+        <h3>Strings</h3>
+        <p>Strings can be defined using double quotes, triple quotes (for multi-line strings), or backticks (for template strings).</p>
+        <pre><code>var normal = "Hello\nWorld"
+var raw_multiline = """Line 1
+Line 2"""
+var name = "Alice"
+var template = `Hello ${name}!`</code></pre>
+        <p>Supported string escapes: <code>\n</code>, <code>\t</code>, <code>\r</code>, <code>\e</code>, <code>\"</code>, <code>\`</code>, <code>\\</code>, <code>\$</code>, <code>\xHH</code> (Hex), <code>\u{HHHH}</code> (Unicode).</p>
+
+        <h3>Numbers</h3>
+        <p>All numbers are 64-bit floating-point (IEEE 754 f64). Underscores can be used for readability.</p>
+        <pre><code>var num = 1_000_000.5</code></pre>
+    </section>
+
+    <section id="types">
+        <h2>Data Types</h2>
+        <p>Pitruck is dynamically typed. The primitive types are:</p>
+        <ul>
+            <li><strong>Number:</strong> 64-bit float.</li>
+            <li><strong>String:</strong> UTF-8 string.</li>
+            <li><strong>Bool:</strong> <code>true</code> or <code>false</code>.</li>
+            <li><strong>Null:</strong> Represents the absence of a value (<code>null</code>).</li>
+        </ul>
+        <p>Complex types include:</p>
+        <ul>
+            <li><strong>List:</strong> Ordered, mutable array of values. <code>[1, 2, 3]</code></li>
+            <li><strong>Dict:</strong> Key-value map. Keys must be strings, numbers, or booleans. <code>{"key": "value"}</code></li>
+            <li><strong>Function:</strong> First-class callable object (closures and lambdas).</li>
+            <li><strong>Class / Instance:</strong> Object-oriented classes and their instantiations.</li>
+            <li><strong>BoundMethod:</strong> A method bound to its instance context.</li>
+        </ul>
+
+        <h3>Truthiness</h3>
+        <p>In conditionals, only <code>false</code> and <code>null</code> are considered falsey. Everything else (including <code>0</code>, <code>0.0</code>, and <code>""</code>) evaluates to <code>true</code>.</p>
+    </section>
+
+    <section id="variables">
+        <h2>Variables</h2>
+        <p>Variables are declared using the <code>var</code> keyword. They are block-scoped.</p>
+        <pre><code>var a = 10
+{
+    var a = 20 # Shadows outer 'a'
+    print a    # 20
+}
+print a        # 10</code></pre>
+        <p>Attempting to access or assign to an undeclared variable throws a <code>RuntimeError</code>.</p>
+    </section>
+
+    <section id="operators">
+        <h2>Operators</h2>
+
+        <h3>Arithmetic</h3>
+        <p><code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>%</code> (Modulo)</p>
+        <p>Note: The <code>+</code> operator also acts as a string concatenator. It coerces numbers into strings when one operand is a string. It also concatenates Lists.</p>
+
+        <h3>Comparison</h3>
+        <p><code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
+        <p>Values of different types are generally not equal, except via formatting comparison fallback in lists.</p>
+
+        <h3>Logical</h3>
+        <p><code>and</code>, <code>or</code>, <code>not</code></p>
+        <p><code>and</code> and <code>or</code> are short-circuiting.</p>
+
+        <h3>Null-Coalescing & Optional Chaining</h3>
+        <table>
+            <tr><th>Operator</th><th>Example</th><th>Description</th></tr>
+            <tr><td><code>??</code></td><td><code>a ?? b</code></td><td>Returns <code>a</code> if it is not null, otherwise returns <code>b</code>.</td></tr>
+            <tr><td><code>?.</code></td><td><code>obj?.prop</code></td><td>Returns <code>obj.prop</code> if <code>obj</code> is not null, else <code>null</code>.</td></tr>
+            <tr><td><code>?[]</code></td><td><code>arr?[idx]</code></td><td>Returns <code>arr[idx]</code> if <code>arr</code> is not null, else <code>null</code>.</td></tr>
+        </table>
+
+        <h3>Assignment</h3>
+        <p><code>=</code>, <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code></p>
+
+        <h3>Ternary</h3>
+        <p><code>condition ? true_expr : false_expr</code></p>
+    </section>
+
+    <section id="control-flow">
+        <h2>Control Flow</h2>
+
+        <h3>If / Elif / Else</h3>
+        <pre><code>if x < 10 {
+    print "Small"
+} elif x < 20 {
+    print "Medium"
+} else {
+    print "Large"
+}</code></pre>
+
+        <h3>Loops</h3>
+        <p><strong>While loop:</strong></p>
+        <pre><code>var i = 0
+while i < 10 {
+    i += 1
+    if i == 5 { continue }
+    if i == 8 { break }
+}</code></pre>
+
+        <p><strong>For-In loop:</strong> Iterates over a List or a String.</p>
+        <pre><code>for item in [1, 2, 3] {
+    print item
+}
+
+for char in "abc" {
+    print char
+}</code></pre>
+
+        <h3>Match Statement</h3>
+        <p>Pattern matching on values.</p>
+        <pre><code>match status {
+    200 => { print "OK" }
+    404 => { print "Not Found" }
+    _   => { print "Unknown" }
+}</code></pre>
+    </section>
+
+    <section id="functions">
+        <h2>Functions</h2>
+
+        <h3>Declaration</h3>
+        <pre><code>func add(a, b) {
+    return a + b
+}</code></pre>
+        <p>If no <code>return</code> is reached, the function implicitly returns <code>null</code>.</p>
+
+        <h3>Lambdas (Closures)</h3>
+        <p>Anonymous functions use the fat arrow <code>=&gt;</code> syntax. They capture their surrounding lexical environment.</p>
+        <pre><code>var multiply = (a, b) => a * b
+var block_lambda = (x) => {
+    return x * 2
+}</code></pre>
+    </section>
+
+    <section id="classes">
+        <h2>Classes and Objects</h2>
+        <p>Classes encapsulate methods and fields. Instantiation does not use a <code>new</code> keyword; you simply call the class as a function. The <code>init</code> method acts as the constructor.</p>
+        <pre><code>class Person {
+    func init(name, age) {
+        self.name = name
+        self.age = age
+    }
+
+    func greet() {
+        print "Hi, I am " + self.name
+    }
+}
+
+var p = Person("Alice", 30)
+p.greet()</code></pre>
+    </section>
+
+    <section id="modules">
+        <h2>Modules & Imports</h2>
+        <p>Use the <code>bring</code> keyword to load external <code>.pr</code> files. The interpreter searches the current directory, the <code>lib/</code> subdirectory, and the executable's path.</p>
+        <pre><code>bring math_utils  # Loads math_utils.pr or lib/math_utils.pr
+# Functions/Classes defined in the module become available in the global scope.</code></pre>
+        <p>Note: Modules are executed in the global context and modify the global scope. Module inclusion is cached (a module is only loaded once per execution).</p>
+    </section>
+
+    <section id="error-handling">
+        <h2>Error Handling</h2>
+        <p>Runtime errors can be caught using <code>try/catch</code>. The caught exception is represented as a dictionary containing <code>type</code>, <code>message</code>, and <code>line</code>.</p>
+        <pre><code>try {
+    var x = 10 / 0
+} catch (err) {
+    print "Error occurred on line " + to_string(err.line)
+    print err.message
+}</code></pre>
+    </section>
+
+    <section id="http-server">
+        <h2>HTTP Web Server</h2>
+        <p>A flagship feature of Pitruck is its ability to natively serve HTTP requests via the <code>--serve</code> CLI flag.</p>
+
+        <h3>Modes of Operation</h3>
+        <ol>
+            <li><strong>Single Handler:</strong> <code>pitruck --serve index.pr</code> funnels all requests through <code>index.pr</code>.</li>
+            <li><strong>File-Based Routing:</strong> <code>pitruck --serve public/</code> routes <code>GET /about</code> to <code>public/about.pr</code>, falling back to <code>public/index.pr</code> if the specific file does not exist.</li>
+        </ol>
+
+        <h3>The Request / Response Contract</h3>
+        <p>When running in <code>--serve</code> mode, the interpreter automatically injects two global instances into your script: <code>request</code> and <code>response</code>.</p>
+
+        <h4><code>request</code> object</h4>
+        <ul>
+            <li><code>request.method</code> (String): "GET", "POST", etc.</li>
+            <li><code>request.path</code> (String): The URL path (e.g., "/about").</li>
+            <li><code>request.query_str</code> (String): The raw query string.</li>
+            <li><code>request.query</code> (Dict): Parsed URL query parameters.</li>
+            <li><code>request.form</code> (Dict): Parsed form data (if Content-Type is <code>application/x-www-form-urlencoded</code>).</li>
+            <li><code>request.body</code> (String): Raw request body.</li>
+            <li><code>request.headers</code> (Dict): HTTP headers (keys are lowercase).</li>
+        </ul>
+
+        <h4><code>response</code> object</h4>
+        <p>Modify this object to shape the HTTP response.</p>
+        <ul>
+            <li><code>response.status</code> (Number): Defaults to 200.</li>
+            <li><code>response.body</code> (String): The content to send back.</li>
+            <li><code>response.headers</code> (Dict): Custom headers to send back. (e.g. <code>response.headers["Content-Type"] = "application/json"</code>).</li>
+        </ul>
+
+        <div class="note">
+            <strong>Content-Type Inference:</strong> If you don't explicitly set a Content-Type, Pitruck checks if your <code>response.body</code> starts with <code>&lt;!DOCTYPE</code> or <code>&lt;</code>. If so, it sets it to <code>text/html; charset=utf-8</code>. Otherwise, it defaults to <code>text/plain; charset=utf-8</code>.
+        </div>
+
+        <div class="warning">
+            <strong>Sandbox Restrictions:</strong> When running in <code>--serve</code> mode, outbound HTTP requests (<code>http_request</code>) and file I/O (<code>sys_readfile</code>, <code>sys_writefile</code>) are <strong>disabled</strong> for security.
+        </div>
+
+        <h3>Server Example</h3>
+        <pre><code># file: server.pr
+if request.path == "/api" {
+    response.headers["Content-Type"] = "application/json"
+    var data = { "status": "success", "method": request.method }
+    response.body = json_encode(data)
+} else {
+    response.body = "&lt;h1&gt;Hello from Pitruck!&lt;/h1&gt;"
+}</code></pre>
+    </section>
+
+    <section id="stdlib">
+        <h2>Standard Library</h2>
+        <p>Pitruck features a rich set of built-in functions.</p>
+
+        <h3>Math & Utilities</h3>
+        <ul>
+            <li><code>rand(min, max)</code>: Returns a random integer between min and max (inclusive).</li>
+            <li><code>range(stop)</code> | <code>range(start, stop)</code> | <code>range(start, stop, step)</code>: Returns a list of numbers.</li>
+            <li><code>to_number(val)</code>: Converts string or bool to a float.</li>
+            <li><code>to_string(val)</code>: Converts a value to its string representation.</li>
+            <li><code>is_number(val)</code>: Returns <code>true</code> if the value can be parsed as a number.</li>
+            <li><code>typeof(val)</code>: Returns "number", "string", "bool", "null", "list", "dict", "function", "class", or "instance".</li>
+            <li><code>clone(val)</code>: Performs a deep clone of a List or Dict.</li>
+            <li><code>math_abs(n)</code>, <code>math_sqrt(n)</code>, <code>math_pow(a, b)</code>, <code>floor(n)</code>, <code>ceil(n)</code>, <code>round(n)</code>: Standard math operations.</li>
+        </ul>
+
+        <h3>String Manipulation</h3>
+        <ul>
+            <li><code>len(str_or_list_or_dict)</code>: Returns the length.</li>
+            <li><code>split(str, sep)</code>: Splits string into a list.</li>
+            <li><code>trim(str)</code>: Removes leading/trailing whitespace.</li>
+            <li><code>upper(str)</code>, <code>lower(str)</code>: Changes casing.</li>
+            <li><code>replace(str, from, to)</code>: Replaces occurrences of a substring.</li>
+            <li><code>starts_with(str, prefix)</code>, <code>ends_with(str, suffix)</code>: Boolean checks.</li>
+            <li><code>substr(str, start, length?)</code>: Extracts a substring.</li>
+            <li><code>char_at(str, index)</code>: Gets character at index.</li>
+            <li><code>pad_left(str, width, fill)</code>, <code>pad_right(...)</code>: Pads a string.</li>
+            <li><code>repeat_str(str, count)</code>: Repeats string <code>count</code> times.</li>
+            <li><code>index_of(str_or_list, needle)</code>: Returns index of first occurrence, or -1.</li>
+            <li><code>html_escape(str)</code>: Escapes <code>&, <, >, ", '</code> for HTML safety.</li>
+        </ul>
+
+        <h3>Lists & Dictionaries</h3>
+        <ul>
+            <li><code>push(list, val)</code>: Appends value to a list.</li>
+            <li><code>pop(list)</code>: Removes and returns the last element of a list.</li>
+            <li><code>contains(str|list|dict, needle)</code>: Checks for existence (substring, list element, or dict key).</li>
+            <li><code>keys(dict)</code>: Returns a list of dict keys.</li>
+            <li><code>values(dict)</code>: Returns a list of dict values.</li>
+            <li><code>remove(dict|list, key_or_index)</code>: Removes an item by key or index.</li>
+            <li><code>join(list, sep)</code>: Joins list elements into a string.</li>
+            <li><code>list_slice(list_or_str, start, end)</code>: Extracts a slice.</li>
+            <li><code>list_reverse(list_or_str)</code>: Reverses a list or string.</li>
+            <li><code>list_sort(list)</code>: Sorts a list in place using string representation.</li>
+            <li><code>list_sort_by(list, cmp_fn)</code>: Sorts using a comparator function that returns a number (>0 to swap).</li>
+            <li><code>list_map(list, fn)</code>: Returns a new mapped list.</li>
+            <li><code>list_filter(list, fn)</code>: Returns a new filtered list.</li>
+            <li><code>list_reduce(list, fn, initial_acc)</code>: Reduces a list to a single value.</li>
+        </ul>
+
+        <h3>JSON & Encoding</h3>
+        <ul>
+            <li><code>json_encode(val)</code>: Serializes to a JSON string.</li>
+            <li><code>json_decode(str)</code>: Parses a JSON string.</li>
+            <li><code>url_encode(str)</code>, <code>url_decode(str)</code>: Application/x-www-form-urlencoded escaping.</li>
+        </ul>
+
+        <h3>System & Network</h3>
+        <ul>
+            <li><code>time()</code>: Returns current time formatted as "HH:MM:SS".</li>
+            <li><code>timestamp()</code>: Returns Unix timestamp in seconds.</li>
+            <li><code>sys_os()</code>: Returns the host OS name.</li>
+            <li><code>sys_exit(code)</code>: Terminates the process.</li>
+            <li><code>sys_sleep(ms)</code>: Blocks execution for <code>ms</code> milliseconds.</li>
+            <li><code>sys_env(key)</code>: Reads an environment variable.</li>
+            <li><code>sys_writefile(path, contents)</code>: Writes string to a file. <em>(Disabled in --serve)</em></li>
+            <li><code>sys_readfile(path)</code>: Reads file to string. <em>(Disabled in --serve)</em></li>
+            <li><code>sys_fileexists(path)</code>: Returns boolean.</li>
+            <li><code>http_request(method, url, body, headers_dict)</code>: Makes an outbound HTTP request. Returns a dict containing <code>status</code>, <code>ok</code>, <code>body</code>, and <code>headers</code>. <em>(Note: HTTPS is not natively supported by the outbound client. Disabled in --serve mode.)</em></li>
+            <li><code>input(prompt)</code>: Reads a line from STDIN.</li>
+            <li><code>clear()</code>: Clears the terminal screen via ANSI escape codes.</li>
+        </ul>
+    </section>
+
+    <section id="internals">
+        <h2>Runtime Internals</h2>
+        <p>The Pitruck interpreter operates in three main phases:</p>
+        <ol>
+            <li><strong>Lexical Analysis:</strong> Source code is converted into a token stream.</li>
+            <li><strong>Parsing:</strong> A recursive descent parser builds an Abstract Syntax Tree (AST).</li>
+            <li><strong>Execution:</strong> A tree-walk interpreter evaluates the AST nodes.</li>
+        </ol>
+
+        <h3>Variable Resolution & Speed</h3>
+        <p>To optimize lookups during the tree-walk phase, Pitruck hashes variable names (via a custom FNV-1a style hashing function in <code>symbol.rs</code>). A lightweight compiler pass (<code>compiler::resolve_program</code>) attaches these pre-computed 64-bit integer hashes to AST nodes. The interpreter scope is a flat vector of <code>(hash, Value)</code> tuples, allowing faster resolution than deep string map lookups.</p>
+
+        <h3>Memory Model</h3>
+        <p>Reference-counted, garbage-collected types (Lists, Dicts, Functions, Instances) are backed by Rust's <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>. This permits mutable sharing across scopes and instances without exposing manual memory management to the user. (Note: Circular references will leak memory as there is no mark-and-sweep GC).</p>
+
+        <h3>Limitations & Known Quirks</h3>
+        <ul>
+            <li><strong>Outbound HTTPS:</strong> The built-in <code>http_request</code> only supports raw HTTP over TCP port 80 (or custom ports). It does not include a TLS backend.</li>
+            <li><strong>Concurrency:</strong> Pitruck scripts run single-threaded. The web server spawns a new OS thread per connection, but shared mutable state across connections is not natively supported in user space.</li>
+            <li><strong>Integer Precision:</strong> Because all numbers are <code>f64</code>, integers lose exact precision beyond <code>2^53 - 1</code>.</li>
+            <li><strong>Error Messages:</strong> Parse errors report the exact line and column, but runtime errors only report the line number.</li>
+        </ul>
+    </section>
+
+</main>
+
+</body>
+</html>
