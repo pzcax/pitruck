@@ -1,0 +1,29 @@
+{
+  "name": "pitruck",
+  "displayName": "pitruck",
+  "description": "Pitruck language support",
+  "version": "1.5.0",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "pitruck",
+      "aliases": ["Pitruck", "pitruck"],
+      "extensions": [".pr",".pr.lib"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "pitruck",
+      "scopeName": "source.pitruck",
+      "path": "./syntaxes/pitruck.tmLanguage.json"
+    }]
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0"
+  }
+}

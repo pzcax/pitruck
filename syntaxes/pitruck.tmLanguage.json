@@ -1,0 +1,245 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Pitruck",
+  "scopeName": "source.pitruck",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#template-strings" },
+    { "include": "#strings" },
+    { "include": "#declarations" },
+    { "include": "#imports" },
+    { "include": "#keywords" },
+    { "include": "#request-response-globals" },
+    { "include": "#standard-library" },
+    { "include": "#constants" },
+    { "include": "#properties" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "foldingStartMarker": "(\\{|\\[|\\(\\s*$),|^\\s*//\\s*#region",
+  "foldingStopMarker": "(\\}|\\]|\\)),|^\\s*//\\s*#endregion",
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.pitruck",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.line.double-slash.pitruck",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.pitruck",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.triple.pitruck",
+          "begin": "\"\"\"",
+          "end": "\"\"\""
+        },
+        {
+          "name": "string.quoted.double.pitruck",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { 
+              "name": "constant.character.escape.pitruck", 
+              "match": "\\\\([nter\"`\\\\$]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]+\\})" 
+            }
+          ]
+        }
+      ]
+    },
+    "template-strings": {
+      "name": "string.template.pitruck",
+      "begin": "`",
+      "end": "`",
+      "patterns": [
+        {
+          "name": "constant.character.escape.pitruck",
+          "match": "\\\\([nter\"`\\\\$]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]+\\})"
+        },
+        {
+          "name": "meta.template.expression.pitruck",
+          "begin": "\\$\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.template-expression.begin.pitruck" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.template-expression.end.pitruck" }
+          },
+          "patterns": [
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(class)\\s+([a-zA-Z_]\\w*)",
+          "captures": {
+            "1": { "name": "storage.type.class.pitruck" },
+            "2": { "name": "entity.name.type.class.pitruck" }
+          }
+        },
+        {
+          "match": "\\b(func)\\s+([a-zA-Z_]\\w*)\\s*\\(",
+          "captures": {
+            "1": { "name": "storage.type.function.pitruck" },
+            "2": { "name": "entity.name.function.pitruck" }
+          }
+        }
+      ]
+    },
+    "imports": {
+      "match": "\\b(bring)\\b",
+      "name": "keyword.control.module.pitruck"
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.conditional.pitruck",
+          "match": "\\b(if|elif|else|match)\\b"
+        },
+        {
+          "name": "keyword.control.loop.pitruck",
+          "match": "\\b(while|for|in|break|continue)\\b"
+        },
+        {
+          "name": "keyword.control.exception.pitruck",
+          "match": "\\b(try|catch)\\b"
+        },
+        {
+          "name": "keyword.control.flow.pitruck",
+          "match": "\\b(return)\\b"
+        },
+        {
+          "name": "storage.type.variable.pitruck",
+          "match": "\\b(var)\\b"
+        },
+        {
+          "name": "variable.language.self.pitruck",
+          "match": "\\b(self)\\b"
+        },
+        {
+          "name": "keyword.other.print.pitruck",
+          "match": "\\b(print)\\b"
+        }
+      ]
+    },
+    "request-response-globals": {
+      "patterns": [
+        {
+          "name": "variable.other.readwrite.global.request.pitruck",
+          "match": "\\b(request)\\b"
+        },
+        {
+          "name": "variable.other.readwrite.global.response.pitruck",
+          "match": "\\b(response)\\b"
+        }
+      ]
+    },
+    "standard-library": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.pitruck",
+          "match": "\\b(rand|range|to_number|to_string|is_number|typeof|clone|math_abs|math_sqrt|math_pow|floor|ceil|round|len|split|trim|upper|lower|replace|starts_with|ends_with|substr|char_at|pad_left|pad_right|repeat_str|index_of|html_escape|push|pop|contains|keys|values|remove|join|list_slice|list_reverse|list_sort|list_sort_by|list_map|list_filter|list_reduce|json_encode|json_decode|url_encode|url_decode|time|timestamp|sys_os|sys_exit|sys_sleep|sys_env|sys_writefile|sys_readfile|sys_fileexists|http_request|input|clear)\\b"
+        }
+      ]
+    },
+    "properties": {
+      "match": "\\.([a-zA-Z_]\\w*)\\b(?![\\(\\w])",
+      "captures": {
+        "1": { "name": "variable.other.property.pitruck" }
+      }
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.pitruck",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.pitruck",
+          "match": "\\b(null)\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.pitruck",
+          "match": "\\b\\d[0-9_]*(\\.\\d[0-9_]*)?\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.pitruck",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "keyword.operator.null-coalescing.pitruck",
+          "match": "(\\?\\?)"
+        },
+        {
+          "name": "keyword.operator.optional-chaining.pitruck",
+          "match": "(\\?\\.|\\?\\[)"
+        },
+        {
+          "name": "keyword.operator.comparison.pitruck",
+          "match": "(==|!=|>|<|>=|<=)"
+        },
+        {
+          "name": "keyword.operator.assignment.pitruck",
+          "match": "(=|\\+=|-=|\\*=|/=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.pitruck",
+          "match": "(\\+|-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.arrow.pitruck",
+          "match": "(=>)"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.block.begin.pitruck",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.block.end.pitruck",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.section.parameters.begin.pitruck",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.section.parameters.end.pitruck",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.section.array.begin.pitruck",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.section.array.end.pitruck",
+          "match": "\\]"
+        },
+        {
+          "name": "punctuation.separator.comma.pitruck",
+          "match": ","
+        }
+      ]
+    }
+  }
+}
