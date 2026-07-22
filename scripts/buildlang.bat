@@ -4,7 +4,7 @@ IF NOT EXIST "Cargo.toml" (
     (
         echo [package]
         echo name = "Pitruck"
-        echo version = "1.4.0"
+        echo version = "1.5.0"
         echo edition = "2021"
 
         echo [profile.release]

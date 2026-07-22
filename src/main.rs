@@ -215,7 +215,7 @@ fn repl() {
     let stdin  = io::stdin();
     let stdout = io::stdout();
 
-    println!("Pitruck v1.4 - type 'exit' to quit");
+    println!("Pitruck v1.5 - type 'exit' to quit");
 
     let mut vm = Interpreter::new();
 
@@ -400,7 +400,7 @@ fn main() {
 
     match args[1].as_str() {
         "--help" => {
-            println!("Pitruck v1.4");
+            println!("Pitruck v1.5");
             println!("Usage: pitruck [command] [args]");
             println!();
             println!("Commands:");

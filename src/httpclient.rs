@@ -53,7 +53,7 @@ pub fn request(method: &str, url: &str, body: Option<&str>, headers: &[(String, 
 
     let body_bytes = body.unwrap_or("");
     let mut req = format!(
-        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: pitruck/1.4\r\n",
+        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: pitruck/1.5\r\n",
         method.to_uppercase(), parsed.path, parsed.host
     );
 
