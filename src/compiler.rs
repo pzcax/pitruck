@@ -1,5 +1,5 @@
 use crate::ast::*;
-use std::collections::HashMap;
+use ahash::AHashMap as HashMap;
 
 pub struct SlotMap {
     scopes: Vec<HashMap<String, usize>>,
@@ -40,181 +40,107 @@ impl SlotMap {
 
 pub fn resolve_program(stmts: &mut Vec<Stmt>) {
     for s in stmts.iter_mut() {
-        resolve_top(s);
+        resolve_stmt_name_hashes(s);
     }
 }
-
-fn resolve_top(stmt: &mut Stmt) {
-    match stmt {
-        Stmt::FuncDef { params, body, .. } => {
-            let mut func_slots = SlotMap::new();
-            for (pname, phash) in params.iter_mut() {
-                let s = func_slots.define(pname);
-                *phash = s as u64;
-            }
-            for s in body.iter_mut() {
-                resolve_stmt(s, &mut func_slots);
-            }
-        }
-        Stmt::ClassDef { methods, .. } => {
-            for m in methods.iter_mut() {
-                resolve_top(m);
-            }
-        }
-        Stmt::If { condition, then_branch, elif_branches, else_branch, .. } => {
-            resolve_expr(condition, &mut SlotMap::new());
-            for s in then_branch.iter_mut() { resolve_top(s); }
-            for (cond, body) in elif_branches.iter_mut() {
-                resolve_expr(cond, &mut SlotMap::new());
-                for s in body.iter_mut() { resolve_top(s); }
-            }
-            if let Some(eb) = else_branch {
-                for s in eb.iter_mut() { resolve_top(s); }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn resolve_stmt(stmt: &mut Stmt, slots: &mut SlotMap) {
+fn resolve_stmt_name_hashes(stmt: &mut Stmt) {
     match stmt {
         Stmt::VarDecl { name, hash, value, .. } => {
-            resolve_expr(value, slots);
-            let slot = slots.define(name);
-            *hash = slot as u64;
+            *hash = crate::symbol::hash_name(name);
+            resolve_expr_name_hashes(value);
         }
-        Stmt::Assign { name, hash, .. } => {
-            if let Some(slot) = slots.lookup(name) {
-                *hash = slot as u64;
-            }
-            if let Stmt::Assign { value, .. } = stmt {
-                resolve_expr(value, slots);
-            }
+        Stmt::Assign { name, hash, value, .. } => {
+            *hash = crate::symbol::hash_name(name);
+            resolve_expr_name_hashes(value);
         }
         Stmt::Set { object, value, .. } => {
-            resolve_expr(object, slots);
-            resolve_expr(value, slots);
+            resolve_expr_name_hashes(object);
+            resolve_expr_name_hashes(value);
         }
         Stmt::IndexSet { object, index, value, .. } => {
-            resolve_expr(object, slots);
-            resolve_expr(index, slots);
-            resolve_expr(value, slots);
-        }
-        Stmt::FuncDef { params, body, .. } => {
-            let mut func_slots = SlotMap::new();
-            for (pname, phash) in params.iter_mut() {
-                let s = func_slots.define(pname);
-                *phash = s as u64;
-            }
-            for s in body.iter_mut() {
-                resolve_stmt(s, &mut func_slots);
-            }
-        }
-        Stmt::ClassDef { name, methods, .. } => {
-            let _ = slots.define(name);
-            for m in methods.iter_mut() {
-                resolve_stmt(m, slots);
-            }
+            resolve_expr_name_hashes(object);
+            resolve_expr_name_hashes(index);
+            resolve_expr_name_hashes(value);
         }
         Stmt::If { condition, then_branch, elif_branches, else_branch, .. } => {
-            resolve_expr(condition, slots);
-            slots.push_scope();
-            for s in then_branch.iter_mut() { resolve_stmt(s, slots); }
-            slots.pop_scope();
-            for (cond, body) in elif_branches.iter_mut() {
-                resolve_expr(cond, slots);
-                slots.push_scope();
-                for s in body.iter_mut() { resolve_stmt(s, slots); }
-                slots.pop_scope();
+            resolve_expr_name_hashes(condition);
+            for s in then_branch.iter_mut() { resolve_stmt_name_hashes(s); }
+            for (c, b) in elif_branches.iter_mut() {
+                resolve_expr_name_hashes(c);
+                for s in b.iter_mut() { resolve_stmt_name_hashes(s); }
             }
             if let Some(eb) = else_branch {
-                slots.push_scope();
-                for s in eb.iter_mut() { resolve_stmt(s, slots); }
-                slots.pop_scope();
+                for s in eb.iter_mut() { resolve_stmt_name_hashes(s); }
             }
         }
         Stmt::While { condition, body, .. } => {
-            resolve_expr(condition, slots);
-            slots.push_scope();
-            for s in body.iter_mut() { resolve_stmt(s, slots); }
-            slots.pop_scope();
+            resolve_expr_name_hashes(condition);
+            for s in body.iter_mut() { resolve_stmt_name_hashes(s); }
         }
         Stmt::For { var, var_hash, iter, body, .. } => {
-            resolve_expr(iter, slots);
-            slots.push_scope();
-            let s = slots.define(var);
-            *var_hash = s as u64;
-            for st in body.iter_mut() { resolve_stmt(st, slots); }
-            slots.pop_scope();
-        }
-        Stmt::Match { expr, arms, default, .. } => {
-            resolve_expr(expr, slots);
-            for (arm_expr, body) in arms.iter_mut() {
-                resolve_expr(arm_expr, slots);
-                slots.push_scope();
-                for s in body.iter_mut() { resolve_stmt(s, slots); }
-                slots.pop_scope();
-            }
-            if let Some(def) = default {
-                slots.push_scope();
-                for s in def.iter_mut() { resolve_stmt(s, slots); }
-                slots.pop_scope();
-            }
+            *var_hash = crate::symbol::hash_name(var);
+            resolve_expr_name_hashes(iter);
+            for s in body.iter_mut() { resolve_stmt_name_hashes(s); }
         }
         Stmt::Return { value, .. } => {
-            if let Some(e) = value { resolve_expr(e, slots); }
+            if let Some(e) = value { resolve_expr_name_hashes(e); }
         }
-        Stmt::Print { value, .. } => {
-            resolve_expr(value, slots);
+        Stmt::Print { value, .. } => { resolve_expr_name_hashes(value); }
+        Stmt::ExprStmt { expr, .. } => { resolve_expr_name_hashes(expr); }
+        Stmt::FuncDef { params, body, .. } => {
+            for (pname, phash) in params.iter_mut() {
+                *phash = crate::symbol::hash_name(pname);
+            }
+            for s in body.iter_mut() { resolve_stmt_name_hashes(s); }
         }
-        Stmt::ExprStmt { expr, .. } => {
-            resolve_expr(expr, slots);
+        Stmt::ClassDef { methods, .. } => {
+            for m in methods.iter_mut() { resolve_stmt_name_hashes(m); }
+        }
+        Stmt::Match { expr, arms, default, .. } => {
+            resolve_expr_name_hashes(expr);
+            for (ae, ab) in arms.iter_mut() {
+                resolve_expr_name_hashes(ae);
+                for s in ab.iter_mut() { resolve_stmt_name_hashes(s); }
+            }
+            if let Some(d) = default {
+                for s in d.iter_mut() { resolve_stmt_name_hashes(s); }
+            }
         }
         Stmt::Bring { .. } => {}
     }
 }
 
-fn resolve_expr(expr: &mut Expr, slots: &mut SlotMap) {
+fn resolve_expr_name_hashes(expr: &mut Expr) {
     match expr {
-        Expr::Ident { name, hash, .. } => {
-            if let Some(slot) = slots.lookup(name) {
-                *hash = slot as u64;
-            }
-        }
+        Expr::Ident { name, hash, .. } => { *hash = crate::symbol::hash_name(name); }
         Expr::BinOp { left, right, .. } => {
-            resolve_expr(left, slots);
-            resolve_expr(right, slots);
+            resolve_expr_name_hashes(left);
+            resolve_expr_name_hashes(right);
         }
-        Expr::Unary { expr: inner, .. } => {
-            resolve_expr(inner, slots);
-        }
+        Expr::Unary { expr: inner, .. } => { resolve_expr_name_hashes(inner); }
         Expr::Call { callee, args, .. } => {
-            resolve_expr(callee, slots);
-            for a in args.iter_mut() { resolve_expr(a, slots); }
+            resolve_expr_name_hashes(callee);
+            for a in args.iter_mut() { resolve_expr_name_hashes(a); }
         }
-        Expr::Get { object, .. } => {
-            resolve_expr(object, slots);
-        }
+        Expr::Get { object, .. } => { resolve_expr_name_hashes(object); }
         Expr::IndexGet { object, index, .. } => {
-            resolve_expr(object, slots);
-            resolve_expr(index, slots);
+            resolve_expr_name_hashes(object);
+            resolve_expr_name_hashes(index);
         }
         Expr::List { elements, .. } => {
-            for e in elements.iter_mut() { resolve_expr(e, slots); }
+            for e in elements.iter_mut() { resolve_expr_name_hashes(e); }
         }
         Expr::Dict { elements, .. } => {
             for (k, v) in elements.iter_mut() {
-                resolve_expr(k, slots);
-                resolve_expr(v, slots);
+                resolve_expr_name_hashes(k);
+                resolve_expr_name_hashes(v);
             }
         }
         Expr::Lambda { params, body, .. } => {
-            let mut func_slots = SlotMap::new();
             for (pname, phash) in params.iter_mut() {
-                let s = func_slots.define(pname);
-                *phash = s as u64;
+                *phash = crate::symbol::hash_name(pname);
             }
-            for s in body.iter_mut() { resolve_stmt(s, &mut func_slots); }
+            for s in body.iter_mut() { resolve_stmt_name_hashes(s); }
         }
         Expr::Self_ { .. } => {}
         Expr::Number(_) | Expr::StringLit(_) | Expr::Bool(_) | Expr::Null => {}

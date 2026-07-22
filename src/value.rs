@@ -1,6 +1,6 @@
 use crate::ast::Stmt;
 use std::fmt;
-use std::collections::HashMap;
+use ahash::AHashMap as HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -10,7 +10,7 @@ pub enum Value {
     Str(String),
     Bool(bool),
     Null,
-    Function { name: String, params: Rc<Vec<(String, u64)>>, body: Rc<Vec<Stmt>> },
+    Function { name: String, params: Rc<Vec<(String, u64)>>, body: Rc<Vec<Stmt>>, captured: Rc<RefCell<Vec<(u64, Value)>>>, is_closure: bool },
     List(Rc<RefCell<Vec<Value>>>),
     Dict(Rc<RefCell<HashMap<String, Value>>>),
     Class { name: String, methods: HashMap<String, Value> },

@@ -1,7 +1,8 @@
 use crate::ast::*;
 use crate::value::Value;
 use crate::error::PitruckError;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+use ahash::AHashMap as HashMap;
 use std::io::{self, Write, BufRead};
 use std::time::{SystemTime, UNIX_EPOCH, Instant};
 use std::rc::Rc;
@@ -16,6 +17,7 @@ pub enum Signal {
 pub struct Interpreter {
     vars: Vec<(u64, Value)>,
     scope_tops: Vec<usize>,
+    lookup_cache: HashMap<u64, usize>,
     start:          Instant,
     rand_seed:      u64,
     loaded_modules: HashSet<String>,
@@ -27,12 +29,13 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         use crate::symbol::hash_name;
-        let mut vars = Vec::with_capacity(256);
+        let mut vars = Vec::with_capacity(1024);
         vars.push((hash_name("PI"), Value::Number(std::f64::consts::PI)));
         vars.push((hash_name("E"),  Value::Number(std::f64::consts::E)));
         Interpreter {
             vars,
-            scope_tops: vec![0],
+            lookup_cache: HashMap::new(),
+            scope_tops: { let mut v = Vec::with_capacity(256); v.push(0); v },
             exe_dir: std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_path_buf())),
             start:  Instant::now(),
             rand_seed: SystemTime::now()
@@ -556,7 +559,14 @@ impl Interpreter {
     }
 
     fn assign_hash(&mut self, hash: u64, name: &str, val: Value, line: usize) -> Result<(), PitruckError> {
-        for (k, v) in self.vars.iter_mut().rev() {
+        let frame_start = *self.scope_tops.first().unwrap_or(&0);
+        for (k, v) in self.vars[frame_start..].iter_mut().rev() {
+            if *k == hash {
+                *v = val;
+                return Ok(());
+            }
+        }
+        for (k, v) in self.vars[..frame_start].iter_mut().rev() {
             if *k == hash {
                 *v = val;
                 return Ok(());
@@ -570,7 +580,11 @@ impl Interpreter {
     }
 
     fn lookup_hash(&self, hash: u64, name: &str, line: usize) -> Result<Value, PitruckError> {
-        for (k, v) in self.vars.iter().rev() {
+        let frame_start = *self.scope_tops.first().unwrap_or(&0);
+        for (k, v) in self.vars[frame_start..].iter().rev() {
+            if *k == hash { return Ok(v.clone()); }
+        }
+        for (k, v) in self.vars[..frame_start].iter().rev() {
             if *k == hash { return Ok(v.clone()); }
         }
         Err(PitruckError::RuntimeError { line, message: format!("undefined variable '{name}'") })
@@ -698,7 +712,7 @@ impl Interpreter {
                 Ok(Signal::None)
             }
             Stmt::FuncDef { name, params, body, .. } => {
-                let func = Value::Function { name: name.clone(), params: Rc::new(params.clone()), body: Rc::new(body.clone()) };
+                let func = Value::Function { name: name.clone(), params: Rc::new(params.clone()), body: Rc::new(body.clone()), captured: Rc::new(RefCell::new(Vec::<(u64, Value)>::new())), is_closure: false };
                 self.define(name, func);
                 Ok(Signal::None)
             }
@@ -708,7 +722,7 @@ impl Interpreter {
                     if let Stmt::FuncDef { name: mname, params, body, .. } = m {
                         method_map.insert(
                             mname.clone(),
-                            Value::Function { name: mname.clone(), params: Rc::new(params.clone()), body: Rc::new(body.clone()) },
+                            Value::Function { name: mname.clone(), params: Rc::new(params.clone()), body: Rc::new(body.clone()), captured: Rc::new(RefCell::new(Vec::<(u64, Value)>::new())), is_closure: false },
                         );
                     }
                 }
@@ -825,7 +839,16 @@ impl Interpreter {
             Expr::Self_ { line }             => self.lookup_hash(crate::symbol::hash_name("self"), "self", *line),
 
             Expr::Lambda { params, body, .. } => {
-                Ok(Value::Function { name: "<lambda>".to_string(), params: Rc::new(params.clone()), body: Rc::new(body.clone()) })
+                let capture_vec: Vec<(u64, Value)> = self.vars.iter().map(|(_, v)| {
+                    (crate::symbol::hash_name("__invalid__"), v.clone())
+                }).collect();
+                let _ = capture_vec;
+                let mut named_capture: Vec<(u64, Value)> = Vec::new();
+                for (k, v) in &self.vars {
+                    named_capture.push((*k, v.clone()));
+                }
+                let captured: Rc<RefCell<Vec<(u64, Value)>>> = Rc::new(RefCell::new(self.vars.clone()));
+                Ok(Value::Function { name: "<lambda>".to_string(), params: Rc::new(params.clone()), body: Rc::new(body.clone()), captured, is_closure: true })
             }
 
             Expr::List { elements, .. } => {
@@ -835,7 +858,7 @@ impl Interpreter {
             }
 
             Expr::Dict { elements, line } => {
-                let mut map = HashMap::with_capacity(elements.len());
+                let mut map = HashMap::with_capacity(elements.len().max(16));
                 for (k, v) in elements {
                     let k_val = self.eval_expr(k)?;
                     if let Value::Str(s) = k_val {
@@ -941,22 +964,52 @@ impl Interpreter {
                 let callee_val = self.eval_expr(callee)?;
 
                 match callee_val {
-                    Value::Function { params, body, .. } => {
+                    Value::Function { params, body, captured, is_closure, .. } => {
                         let body = body.clone();
+                        let captured = captured.clone();
                         if evaluated_args.len() != params.len() {
                             return Err(PitruckError::RuntimeError {
                                 line: *line,
                                 message: format!("expected {} arg(s), got {}", params.len(), evaluated_args.len()),
                             });
                         }
-                        self.push_scope();
-                        for ((p, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
-                        let mut ret = Value::Null;
-                        'call: for s in body.iter() {
-                            if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
+                        if !is_closure {
+                            let scope_base = self.vars.len();
+                            self.scope_tops.push(scope_base);
+                            self.vars.reserve(params.len());
+                            for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.vars.push((*ph, arg)); }
+                            let mut ret = Value::Null;
+                            'call: for s in body.iter() {
+                                if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
+                            }
+                            let top = self.scope_tops.pop().unwrap_or(0);
+                            self.vars.truncate(top);
+                            Ok(ret)
+                        } else {
+                            let saved = self.vars.clone();
+                            let saved_tops = self.scope_tops.clone();
+                            let mut env = captured.borrow().clone();
+                            for (k, v) in &self.vars {
+                                if !env.iter().any(|(ek, _)| ek == k) {
+                                    env.push((*k, v.clone()));
+                                }
+                            }
+                            self.vars = env;
+                            self.scope_tops = vec![self.vars.len()];
+                            self.push_scope();
+                            for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
+                            let mut ret = Value::Null;
+                            'call: for s in body.iter() {
+                                if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
+                            }
+                            let original_len = captured.borrow().len();
+                            let updated: Vec<(u64, Value)> = self.vars[..original_len].to_vec();
+                            *captured.borrow_mut() = updated;
+                            self.pop_scope();
+                            self.vars = saved;
+                            self.scope_tops = saved_tops;
+                            Ok(ret)
                         }
-                        self.pop_scope();
-                        Ok(ret)
                     }
                     Value::Class { name, methods } => {
                         let fields = Rc::new(RefCell::new(HashMap::new()));
@@ -999,7 +1052,7 @@ impl Interpreter {
                             }
                             self.push_scope();
                             self.define("self", *receiver);
-                            for ((p, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
+                            for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
                             let mut ret = Value::Null;
                             for s in body.iter() {
                                 if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break; }
@@ -1045,9 +1098,34 @@ impl Interpreter {
         match op {
             BinOpKind::Add => match (l, r) {
                 (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
-                (Value::Str(a),    Value::Str(b))    => Ok(Value::Str(a + &b)),
-                (Value::Str(a),    Value::Number(b)) => Ok(Value::Str(format!("{a}{b}"))),
-                (Value::Number(a), Value::Str(b))    => Ok(Value::Str(format!("{a}{b}"))),
+                (Value::Str(a), Value::Str(b)) => {
+                    let mut s = String::with_capacity(a.len() + b.len());
+                    s.push_str(&a);
+                    s.push_str(&b);
+                    Ok(Value::Str(s))
+                }
+                (Value::Str(a), Value::Number(b)) => {
+                    let b_str = if b.fract() == 0.0 && b.abs() < 1e15 {
+                        format!("{}", b as i64)
+                    } else {
+                        format!("{}", b)
+                    };
+                    let mut s = String::with_capacity(a.len() + b_str.len());
+                    s.push_str(&a);
+                    s.push_str(&b_str);
+                    Ok(Value::Str(s))
+                }
+                (Value::Number(a), Value::Str(b)) => {
+                    let a_str = if a.fract() == 0.0 && a.abs() < 1e15 {
+                        format!("{}", a as i64)
+                    } else {
+                        format!("{}", a)
+                    };
+                    let mut s = String::with_capacity(a_str.len() + b.len());
+                    s.push_str(&a_str);
+                    s.push_str(&b);
+                    Ok(Value::Str(s))
+                }
                 _ => Err(type_err("'+' requires numbers or strings")),
             },
             BinOpKind::Sub => match (l, r) {

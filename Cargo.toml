@@ -9,4 +9,8 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+ahash = "0.8"
+
+[dependencies]
+ahash = "0.8.12"
 

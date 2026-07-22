@@ -13,6 +13,7 @@ IF NOT EXIST "Cargo.toml" (
         echo codegen-units = 1
         echo panic = "abort"
         echo strip = true
+        echo ahash = "0.8"
 
     ) > Cargo.toml
 )
