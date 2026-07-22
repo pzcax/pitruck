@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 pub enum Signal {
     None,
     Return(Value),
+    Break,
+    Continue,
 }
 
 pub struct Interpreter {
@@ -164,6 +166,45 @@ impl Interpreter {
                 .collect(),
             _ => vec![],
         }
+    }
+
+    fn dict_key_string(&self, v: Value, line: usize) -> Result<String, PitruckError> {
+        match v {
+            Value::Str(s) => Ok(s),
+            Value::Number(n) => Ok(if n.fract() == 0.0 && n.abs() < 1e15 { format!("{}", n as i64) } else { format!("{}", n) }),
+            Value::Bool(b) => Ok(format!("{}", b)),
+            other => Err(PitruckError::RuntimeError { line, message: format!("dict key must be a string, number, or bool, got {}", other) }),
+        }
+    }
+
+    fn deep_clone(&self, v: &Value) -> Value {
+        match v {
+            Value::List(l) => {
+                let items: Vec<Value> = l.borrow().iter().map(|x| self.deep_clone(x)).collect();
+                Value::List(Rc::new(RefCell::new(items)))
+            }
+            Value::Dict(d) => {
+                let mut map = HashMap::new();
+                for (k, val) in d.borrow().iter() {
+                    map.insert(k.clone(), self.deep_clone(val));
+                }
+                Value::Dict(Rc::new(RefCell::new(map)))
+            }
+            other => other.clone(),
+        }
+    }
+
+    fn error_to_value(&self, e: &PitruckError) -> Value {
+        let (etype, msg, err_line) = match e {
+            PitruckError::LexError   { line, message, .. } => ("lex", message.clone(), *line),
+            PitruckError::ParseError { line, message, .. } => ("parse", message.clone(), *line),
+            PitruckError::RuntimeError { line, message }   => ("runtime", message.clone(), *line),
+        };
+        let mut map = HashMap::new();
+        map.insert("type".to_string(), Value::Str(etype.to_string()));
+        map.insert("message".to_string(), Value::Str(msg));
+        map.insert("line".to_string(), Value::Number(err_line as f64));
+        Value::Dict(Rc::new(RefCell::new(map)))
     }
 
     fn get_instance(&self, name: &str) -> Option<Rc<RefCell<HashMap<String, Value>>>> {
@@ -804,6 +845,26 @@ impl Interpreter {
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "round requires number".to_string() })),
                 }
             }
+            "clone" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                Some(Ok(self.deep_clone(&args[0])))
+            }
+            "typeof" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                let t = match &args[0] {
+                    Value::Number(_)       => "number",
+                    Value::Str(_)          => "string",
+                    Value::Bool(_)         => "bool",
+                    Value::Null            => "null",
+                    Value::List(_)         => "list",
+                    Value::Dict(_)         => "dict",
+                    Value::Function { .. } => "function",
+                    Value::Class { .. }    => "class",
+                    Value::Instance { .. } => "instance",
+                    Value::BoundMethod { .. } => "function",
+                };
+                Some(Ok(Value::Str(t.to_string())))
+            }
             _ => None,
         }
     }
@@ -812,7 +873,7 @@ impl Interpreter {
         for stmt in program {
             match self.exec_stmt(stmt)? {
                 Signal::Return(_) => break,
-                Signal::None      => {}
+                _ => {}
             }
         }
         Ok(())
@@ -913,11 +974,7 @@ impl Interpreter {
                         }
                     }
                     Value::Dict(dict) => {
-                        let k = match idx {
-                            Value::Str(s) => s,
-                            Value::Number(n) => format!("{}", n as i64),
-                            other => return Err(PitruckError::RuntimeError { line: *line, message: format!("dict key must be a string, got {}", other) }),
-                        };
+                        let k = self.dict_key_string(idx, *line)?;
                         dict.borrow_mut().insert(k, val);
                         Ok(Signal::None)
                     }
@@ -1012,8 +1069,10 @@ impl Interpreter {
             Stmt::While { condition, body, .. } => {
                 loop {
                     if !self.eval_expr(condition)?.is_truthy() { break; }
-                    if let Signal::Return(v) = self.exec_block(body)? {
-                        return Ok(Signal::Return(v));
+                    match self.exec_block(body)? {
+                        Signal::Return(v) => return Ok(Signal::Return(v)),
+                        Signal::Break => break,
+                        Signal::Continue | Signal::None => {}
                     }
                 }
                 Ok(Signal::None)
@@ -1033,8 +1092,10 @@ impl Interpreter {
                     self.define_hash(*var_hash, item);
                     let sig = self.exec_block_in_current_scope(body)?;
                     self.pop_scope();
-                    if let Signal::Return(v) = sig {
-                        return Ok(Signal::Return(v));
+                    match sig {
+                        Signal::Return(v) => return Ok(Signal::Return(v)),
+                        Signal::Break => break,
+                        Signal::Continue | Signal::None => {}
                     }
                 }
                 Ok(Signal::None)
@@ -1045,23 +1106,34 @@ impl Interpreter {
                     let arm_val = self.eval_expr(arm_expr)?;
                     if self.values_equal(&val, &arm_val) {
                         for s in body {
-                            match self.exec_stmt(s)? {
-                                Signal::Return(v) => return Ok(Signal::Return(v)),
-                                Signal::None      => {}
-                            }
+                            let sig = self.exec_stmt(s)?;
+                            if !matches!(sig, Signal::None) { return Ok(sig); }
                         }
                         return Ok(Signal::None);
                     }
                 }
                 if let Some(def_body) = default {
                     for s in def_body {
-                        match self.exec_stmt(s)? {
-                            Signal::Return(v) => return Ok(Signal::Return(v)),
-                            Signal::None      => {}
-                        }
+                        let sig = self.exec_stmt(s)?;
+                        if !matches!(sig, Signal::None) { return Ok(sig); }
                     }
                 }
                 Ok(Signal::None)
+            }
+            Stmt::Break { .. } => Ok(Signal::Break),
+            Stmt::Continue { .. } => Ok(Signal::Continue),
+            Stmt::Try { try_body, catch_hash, catch_body, .. } => {
+                match self.exec_block(try_body) {
+                    Ok(sig) => Ok(sig),
+                    Err(e) => {
+                        self.push_scope();
+                        let err_val = self.error_to_value(&e);
+                        self.define_hash(*catch_hash, err_val);
+                        let sig = self.exec_block_in_current_scope(catch_body);
+                        self.pop_scope();
+                        sig
+                    }
+                }
             }
             Stmt::Return { value, .. } => {
                 let v = if let Some(e) = value { self.eval_expr(e)? } else { Value::Null };
@@ -1090,8 +1162,9 @@ impl Interpreter {
     #[inline(always)]
     fn exec_block_in_current_scope(&mut self, stmts: &[Stmt]) -> Result<Signal, PitruckError> {
         for s in stmts {
-            if let Signal::Return(v) = self.exec_stmt(s)? {
-                return Ok(Signal::Return(v));
+            let sig = self.exec_stmt(s)?;
+            if !matches!(sig, Signal::None) {
+                return Ok(sig);
             }
         }
         Ok(Signal::None)
@@ -1112,12 +1185,20 @@ impl Interpreter {
                     self.vars.reserve(params.len());
                     for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.vars.push((*ph, arg)); }
                     let mut ret = Value::Null;
+                    let mut call_err = None;
                     'call: for s in body.iter() {
-                        if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
+                        match self.exec_stmt(s) {
+                            Ok(Signal::Return(v)) => { ret = v; break 'call; }
+                            Ok(_) => {}
+                            Err(e) => { call_err = Some(e); break 'call; }
+                        }
                     }
                     let top = self.scope_tops.pop().unwrap_or(0);
                     self.vars.truncate(top);
-                    Ok(ret)
+                    match call_err {
+                        Some(e) => Err(e),
+                        None    => Ok(ret),
+                    }
                 } else {
                     let saved = self.vars.clone();
                     let saved_tops = self.scope_tops.clone();
@@ -1132,16 +1213,24 @@ impl Interpreter {
                     self.push_scope();
                     for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
                     let mut ret = Value::Null;
+                    let mut call_err = None;
                     'call: for s in body.iter() {
-                        if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
+                        match self.exec_stmt(s) {
+                            Ok(Signal::Return(v)) => { ret = v; break 'call; }
+                            Ok(_) => {}
+                            Err(e) => { call_err = Some(e); break 'call; }
+                        }
                     }
-                    let original_len = captured.borrow().len();
+                    let original_len = captured.borrow().len().min(self.vars.len());
                     let updated: Vec<(u64, Value)> = self.vars[..original_len].to_vec();
                     *captured.borrow_mut() = updated;
                     self.pop_scope();
                     self.vars = saved;
                     self.scope_tops = saved_tops;
-                    Ok(ret)
+                    match call_err {
+                        Some(e) => Err(e),
+                        None    => Ok(ret),
+                    }
                 }
             }
             Value::Class { name, methods } => {
@@ -1162,10 +1251,16 @@ impl Interpreter {
                     self.push_scope();
                     self.define("self", instance.clone());
                     for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
+                    let mut init_err = None;
                     for s in body.iter() {
-                        if let Signal::Return(_) = self.exec_stmt(s)? { break; }
+                        match self.exec_stmt(s) {
+                            Ok(Signal::Return(_)) => break,
+                            Ok(_) => {}
+                            Err(e) => { init_err = Some(e); break; }
+                        }
                     }
                     self.pop_scope();
+                    if let Some(e) = init_err { return Err(e); }
                 } else if !evaluated_args.is_empty() {
                     return Err(PitruckError::RuntimeError {
                         line,
@@ -1186,11 +1281,19 @@ impl Interpreter {
                     self.define("self", *receiver);
                     for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
                     let mut ret = Value::Null;
+                    let mut call_err = None;
                     for s in body.iter() {
-                        if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break; }
+                        match self.exec_stmt(s) {
+                            Ok(Signal::Return(v)) => { ret = v; break; }
+                            Ok(_) => {}
+                            Err(e) => { call_err = Some(e); break; }
+                        }
                     }
                     self.pop_scope();
-                    Ok(ret)
+                    match call_err {
+                        Some(e) => Err(e),
+                        None    => Ok(ret),
+                    }
                 } else {
                     Err(PitruckError::RuntimeError { line, message: "invalid bound method".to_string() })
                 }
@@ -1227,17 +1330,15 @@ impl Interpreter {
                 let mut map = HashMap::with_capacity(elements.len().max(16));
                 for (k, v) in elements {
                     let k_val = self.eval_expr(k)?;
-                    if let Value::Str(s) = k_val {
-                        map.insert(s, self.eval_expr(v)?);
-                    } else {
-                        return Err(PitruckError::RuntimeError { line: *line, message: "dict key must be a string".to_string() });
-                    }
+                    let key = self.dict_key_string(k_val, *line)?;
+                    map.insert(key, self.eval_expr(v)?);
                 }
                 Ok(Value::Dict(Rc::new(RefCell::new(map))))
             }
 
-            Expr::Get { object, name, line } => {
+            Expr::Get { object, name, line, optional } => {
                 let obj = self.eval_expr(object)?;
+                if *optional && matches!(obj, Value::Null) { return Ok(Value::Null); }
                 match &obj {
                     Value::Instance { fields, methods, .. } => {
                         if let Some(val) = fields.borrow().get(name) { return Ok(val.clone()); }
@@ -1249,12 +1350,16 @@ impl Interpreter {
                         }
                         Err(PitruckError::RuntimeError { line: *line, message: format!("property '{name}' not found on instance") })
                     }
+                    Value::Dict(d) => {
+                        Ok(d.borrow().get(name).cloned().unwrap_or(Value::Null))
+                    }
                     _ => Err(PitruckError::RuntimeError { line: *line, message: format!("cannot access property '{name}' on a non-instance value") }),
                 }
             }
 
-            Expr::IndexGet { object, index, line } => {
+            Expr::IndexGet { object, index, line, optional } => {
                 let obj = self.eval_expr(object)?;
+                if *optional && matches!(obj, Value::Null) { return Ok(Value::Null); }
                 let idx = self.eval_expr(index)?;
                 match obj {
                     Value::List(list) => {
@@ -1268,11 +1373,7 @@ impl Interpreter {
                         }
                     }
                     Value::Dict(dict) => {
-                        let k = match idx {
-                            Value::Str(s) => s,
-                            Value::Number(n) => format!("{}", n as i64),
-                            other => return Err(PitruckError::RuntimeError { line: *line, message: format!("dict key must be a string, got {}", other) }),
-                        };
+                        let k = self.dict_key_string(idx, *line)?;
                         Ok(dict.borrow().get(&k).cloned().unwrap_or(Value::Null))
                     }
                     Value::Str(s) => {
@@ -1310,9 +1411,21 @@ impl Interpreter {
                     let l = self.eval_expr(left)?;
                     return if l.is_truthy() { Ok(l) } else { self.eval_expr(right) };
                 }
+                if matches!(op, BinOpKind::Coalesce) {
+                    let l = self.eval_expr(left)?;
+                    return if matches!(l, Value::Null) { self.eval_expr(right) } else { Ok(l) };
+                }
                 let l = self.eval_expr(left)?;
                 let r = self.eval_expr(right)?;
                 self.apply_binop(op, l, r, *line)
+            }
+
+            Expr::Ternary { cond, then_expr, else_expr, .. } => {
+                if self.eval_expr(cond)?.is_truthy() {
+                    self.eval_expr(then_expr)
+                } else {
+                    self.eval_expr(else_expr)
+                }
             }
 
             Expr::Call { callee, args, line } => {
@@ -1355,7 +1468,7 @@ impl Interpreter {
                 BinOpKind::Gt   => Ok(Value::Bool(a > b)),
                 BinOpKind::LtEq => Ok(Value::Bool(a <= b)),
                 BinOpKind::GtEq => Ok(Value::Bool(a >= b)),
-                BinOpKind::And | BinOpKind::Or => unreachable!(),
+                BinOpKind::And | BinOpKind::Or | BinOpKind::Coalesce => unreachable!(),
             };
         }
 
@@ -1420,7 +1533,7 @@ impl Interpreter {
             BinOpKind::Gt    => Err(type_err("'>' requires numbers")),
             BinOpKind::LtEq  => Err(type_err("'<=' requires numbers")),
             BinOpKind::GtEq  => Err(type_err("'>=' requires numbers")),
-            BinOpKind::And | BinOpKind::Or => unreachable!("And/Or short-circuit in eval_expr"),
+            BinOpKind::And | BinOpKind::Or | BinOpKind::Coalesce => unreachable!("And/Or/Coalesce short-circuit in eval_expr"),
         }
     }
 

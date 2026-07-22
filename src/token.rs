@@ -1,7 +1,14 @@
 #[derive(Debug, Clone, PartialEq)]
+pub enum TemplatePart {
+    Str(String),
+    Code(Vec<(Token, usize, usize)>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Number(f64),
     StringLit(String),
+    TemplateStr(Vec<TemplatePart>),
     Ident(String),
 
     Var,
@@ -18,6 +25,10 @@ pub enum Token {
     Class,
     Self_,
     Match,
+    Break,
+    Continue,
+    Try,
+    Catch,
     And,
     Or,
     Not,
@@ -52,6 +63,10 @@ pub enum Token {
     Dot,
     FatArrow,
     Colon,
+    Question,
+    QuestionQuestion,
+    OptDot,
+    OptLBracket,
     Underscore,
 
     EOF,

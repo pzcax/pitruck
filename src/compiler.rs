@@ -107,6 +107,13 @@ fn resolve_stmt_name_hashes(stmt: &mut Stmt) {
             }
         }
         Stmt::Bring { .. } => {}
+        Stmt::Break { .. } => {}
+        Stmt::Continue { .. } => {}
+        Stmt::Try { try_body, catch_var, catch_hash, catch_body, .. } => {
+            for s in try_body.iter_mut() { resolve_stmt_name_hashes(s); }
+            *catch_hash = crate::symbol::hash_name(catch_var);
+            for s in catch_body.iter_mut() { resolve_stmt_name_hashes(s); }
+        }
     }
 }
 
@@ -143,6 +150,11 @@ fn resolve_expr_name_hashes(expr: &mut Expr) {
             for s in body.iter_mut() { resolve_stmt_name_hashes(s); }
         }
         Expr::Self_ { .. } => {}
+        Expr::Ternary { cond, then_expr, else_expr, .. } => {
+            resolve_expr_name_hashes(cond);
+            resolve_expr_name_hashes(then_expr);
+            resolve_expr_name_hashes(else_expr);
+        }
         Expr::Number(_) | Expr::StringLit(_) | Expr::Bool(_) | Expr::Null => {}
     }
 }

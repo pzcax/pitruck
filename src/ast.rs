@@ -20,6 +20,9 @@ pub enum Stmt {
     Return { value: Option<Expr>, line: usize },
     Print  { value: Expr, line: usize },
     ExprStmt { expr: Expr, line: usize },
+    Break    { line: usize },
+    Continue { line: usize },
+    Try      { try_body: Vec<Stmt>, catch_var: String, catch_hash: u64, catch_body: Vec<Stmt>, line: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -33,18 +36,19 @@ pub enum Expr {
     List     { elements: Vec<Expr>, line: usize },
     Dict     { elements: Vec<(Expr, Expr)>, line: usize },
     Lambda   { params: Vec<(String, u64)>, body: Vec<Stmt>, line: usize },
-    Get      { object: Box<Expr>, name: String, line: usize },
-    IndexGet { object: Box<Expr>, index: Box<Expr>, line: usize },
+    Get      { object: Box<Expr>, name: String, line: usize, optional: bool },
+    IndexGet { object: Box<Expr>, index: Box<Expr>, line: usize, optional: bool },
     BinOp    { op: BinOpKind, left: Box<Expr>, right: Box<Expr>, line: usize },
     Unary    { op: UnaryOpKind, expr: Box<Expr>, line: usize },
     Call     { callee: Box<Expr>, args: Vec<Expr>, line: usize },
+    Ternary  { cond: Box<Expr>, then_expr: Box<Expr>, else_expr: Box<Expr>, line: usize },
 }
 
 #[derive(Debug, Clone)]
 pub enum BinOpKind {
     Add, Sub, Mul, Div, Mod,
     Eq, NotEq, Lt, Gt, LtEq, GtEq,
-    And, Or,
+    And, Or, Coalesce,
 }
 
 #[derive(Debug, Clone)]

@@ -1,4 +1,4 @@
-use crate::token::Token;
+use crate::token::{Token, TemplatePart};
 use crate::ast::*;
 use crate::error::PitruckError;
 use crate::symbol::hash_name;
@@ -150,6 +150,9 @@ impl Parser {
                 Ok(Stmt::Print { value, line })
             }
             Token::If    => self.parse_if(),
+            Token::Break => { self.advance(); Ok(Stmt::Break { line }) }
+            Token::Continue => { self.advance(); Ok(Stmt::Continue { line }) }
+            Token::Try => self.parse_try(),
             Token::While => {
                 self.advance();
                 let condition = self.parse_expr()?;
@@ -179,9 +182,9 @@ impl Parser {
                     let rhs = self.parse_expr()?;
                     let value = Expr::BinOp { op, left: Box::new(expr.clone()), right: Box::new(rhs), line };
                     return match expr {
-                        Expr::Ident { name, hash, line }       => Ok(Stmt::Assign { name, hash, value, line }),
-                        Expr::Get { object, name, line }       => Ok(Stmt::Set { object: *object, name, value, line }),
-                        Expr::IndexGet { object, index, line } => Ok(Stmt::IndexSet { object: *object, index: *index, value, line }),
+                        Expr::Ident { name, hash, line }          => Ok(Stmt::Assign { name, hash, value, line }),
+                        Expr::Get { object, name, line, .. }      => Ok(Stmt::Set { object: *object, name, value, line }),
+                        Expr::IndexGet { object, index, line, .. } => Ok(Stmt::IndexSet { object: *object, index: *index, value, line }),
                         _ => Err(PitruckError::ParseError { line, col, message: "invalid assignment target".to_string() }),
                     };
                 }
@@ -189,9 +192,9 @@ impl Parser {
                     self.advance();
                     let value = self.parse_expr()?;
                     match expr {
-                        Expr::Ident { name, hash, line }       => Ok(Stmt::Assign { name, hash, value, line }),
-                        Expr::Get { object, name, line }       => Ok(Stmt::Set { object: *object, name, value, line }),
-                        Expr::IndexGet { object, index, line } => Ok(Stmt::IndexSet { object: *object, index: *index, value, line }),
+                        Expr::Ident { name, hash, line }          => Ok(Stmt::Assign { name, hash, value, line }),
+                        Expr::Get { object, name, line, .. }      => Ok(Stmt::Set { object: *object, name, value, line }),
+                        Expr::IndexGet { object, index, line, .. } => Ok(Stmt::IndexSet { object: *object, index: *index, value, line }),
                         _ => Err(PitruckError::ParseError { line, col, message: "invalid assignment target".to_string() }),
                     }
                 } else {
@@ -199,6 +202,19 @@ impl Parser {
                 }
             }
         }
+    }
+
+    fn parse_try(&mut self) -> Result<Stmt, PitruckError> {
+        let (line, _) = self.span();
+        self.advance();
+        let try_body = self.parse_body()?;
+        self.expect(&Token::Catch)?;
+        self.expect(&Token::LParen)?;
+        let catch_var = self.expect_ident()?;
+        let catch_hash = hash_name(&catch_var);
+        self.expect(&Token::RParen)?;
+        let catch_body = self.parse_body()?;
+        Ok(Stmt::Try { try_body, catch_var, catch_hash, catch_body, line })
     }
 
     fn parse_if(&mut self) -> Result<Stmt, PitruckError> {
@@ -244,14 +260,38 @@ impl Parser {
     fn is_expr_start(&self) -> bool {
         matches!(
             self.peek(),
-            Token::Number(_) | Token::StringLit(_) | Token::True  | Token::False
+            Token::Number(_) | Token::StringLit(_) | Token::TemplateStr(_) | Token::True  | Token::False
             | Token::Null    | Token::Ident(_)      | Token::LParen
             | Token::Minus   | Token::Not            | Token::LBracket
             | Token::LBrace  | Token::Self_
         )
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, PitruckError> { self.parse_or() }
+    fn parse_expr(&mut self) -> Result<Expr, PitruckError> { self.parse_ternary() }
+
+    fn parse_coalesce(&mut self) -> Result<Expr, PitruckError> {
+        let (line, _) = self.span();
+        let mut left = self.parse_or()?;
+        while matches!(self.peek(), Token::QuestionQuestion) {
+            self.advance();
+            let right = self.parse_or()?;
+            left = Expr::BinOp { op: BinOpKind::Coalesce, left: Box::new(left), right: Box::new(right), line };
+        }
+        Ok(left)
+    }
+
+    fn parse_ternary(&mut self) -> Result<Expr, PitruckError> {
+        let (line, _) = self.span();
+        let cond = self.parse_coalesce()?;
+        if matches!(self.peek(), Token::Question) {
+            self.advance();
+            let then_expr = self.parse_ternary()?;
+            self.expect(&Token::Colon)?;
+            let else_expr = self.parse_ternary()?;
+            return Ok(Expr::Ternary { cond: Box::new(cond), then_expr: Box::new(then_expr), else_expr: Box::new(else_expr), line });
+        }
+        Ok(cond)
+    }
 
     fn parse_or(&mut self) -> Result<Expr, PitruckError> {
         let (line, _) = self.span();
@@ -363,12 +403,23 @@ impl Parser {
                     self.advance();
                     let index = self.parse_expr()?;
                     self.expect(&Token::RBracket)?;
-                    expr = Expr::IndexGet { object: Box::new(expr), index: Box::new(index), line };
+                    expr = Expr::IndexGet { object: Box::new(expr), index: Box::new(index), line, optional: false };
+                }
+                Token::OptLBracket => {
+                    self.advance();
+                    let index = self.parse_expr()?;
+                    self.expect(&Token::RBracket)?;
+                    expr = Expr::IndexGet { object: Box::new(expr), index: Box::new(index), line, optional: true };
                 }
                 Token::Dot => {
                     self.advance();
                     let name = self.expect_ident()?;
-                    expr = Expr::Get { object: Box::new(expr), name, line };
+                    expr = Expr::Get { object: Box::new(expr), name, line, optional: false };
+                }
+                Token::OptDot => {
+                    self.advance();
+                    let name = self.expect_ident()?;
+                    expr = Expr::Get { object: Box::new(expr), name, line, optional: true };
                 }
                 _ => break,
             }
@@ -412,6 +463,24 @@ impl Parser {
         match self.peek().clone() {
             Token::Number(n)    => { self.advance(); Ok(Expr::Number(n)) }
             Token::StringLit(s) => { self.advance(); Ok(Expr::StringLit(s)) }
+            Token::TemplateStr(parts) => {
+                self.advance();
+                let mut expr: Option<Expr> = None;
+                for part in parts {
+                    let piece = match part {
+                        TemplatePart::Str(s) => Expr::StringLit(s),
+                        TemplatePart::Code(tokens) => {
+                            let mut sub_parser = Parser::new(tokens);
+                            sub_parser.parse_expr()?
+                        }
+                    };
+                    expr = Some(match expr {
+                        None => piece,
+                        Some(acc) => Expr::BinOp { op: BinOpKind::Add, left: Box::new(acc), right: Box::new(piece), line },
+                    });
+                }
+                Ok(expr.unwrap_or(Expr::StringLit(String::new())))
+            }
             Token::True         => { self.advance(); Ok(Expr::Bool(true)) }
             Token::False        => { self.advance(); Ok(Expr::Bool(false)) }
             Token::Null         => { self.advance(); Ok(Expr::Null) }
@@ -527,8 +596,17 @@ fn token_display(t: &Token) -> String {
         Token::Comma        => ",".to_string(),
         Token::Dot          => ".".to_string(),
         Token::FatArrow     => "=>".to_string(),
+        Token::TemplateStr(_) => "template string".to_string(),
         Token::Colon        => ":".to_string(),
+        Token::Question     => "?".to_string(),
+        Token::QuestionQuestion => "??".to_string(),
+        Token::OptDot       => "?.".to_string(),
+        Token::OptLBracket  => "?[".to_string(),
         Token::Underscore   => "_".to_string(),
+        Token::Break        => "break".to_string(),
+        Token::Continue     => "continue".to_string(),
+        Token::Try          => "try".to_string(),
+        Token::Catch        => "catch".to_string(),
         Token::EOF          => "end of file".to_string(),
     }
 }
