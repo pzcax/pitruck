@@ -7,11 +7,14 @@ mod value;
 mod interpreter;
 mod symbol;
 mod compiler;
+mod json;
+mod httpclient;
 
 use std::env;
 use std::fs;
 use std::io::{self, Write, Read, BufRead};
 use std::time::Instant;
+use std::sync::Arc;
 
 use lexer::Lexer;
 use parser::Parser;
@@ -68,11 +71,14 @@ fn query_to_pitruck_dict(query: &str) -> String {
     let pairs: Vec<String> = query
         .split('&')
         .filter_map(|pair| {
+            if pair.is_empty() { return None; }
             let mut kv = pair.splitn(2, '=');
             let k = kv.next()?.trim();
             let v = kv.next().unwrap_or("").trim();
             if k.is_empty() { return None; }
-            Some(format!("\"{}\": \"{}\"", escape_str(k), escape_str(v)))
+            let k = httpclient::url_decode(k);
+            let v = httpclient::url_decode(v);
+            Some(format!("\"{}\": \"{}\"", escape_str(&k), escape_str(&v)))
         })
         .collect();
     format!("{{{}}}", pairs.join(", "))
@@ -91,6 +97,17 @@ fn headers_to_pitruck_dict(headers: &[String]) -> String {
     format!("{{{}}}", pairs.join(", "))
 }
 
+fn content_type_of(headers: &[String]) -> String {
+    for h in headers {
+        if let Some((k, v)) = h.split_once(':') {
+            if k.trim().to_lowercase() == "content-type" {
+                return v.trim().to_lowercase();
+            }
+        }
+    }
+    String::new()
+}
+
 fn serve_request(
     source: &str,
     script_path: Option<&str>,
@@ -104,14 +121,22 @@ fn serve_request(
     let query_dict   = query_to_pitruck_dict(query);
     let headers_dict = headers_to_pitruck_dict(headers);
 
+    let ct = content_type_of(headers);
+    let form_dict = if ct.contains("application/x-www-form-urlencoded") {
+        query_to_pitruck_dict(body)
+    } else {
+        "{}".to_string()
+    };
+
     let preamble = format!(
         r#"
 class __Request {{
-    func init(method, path, query_str, query, body, headers) {{
+    func init(method, path, query_str, query, form, body, headers) {{
         self.method    = method
         self.path      = path
         self.query_str = query_str
         self.query     = query
+        self.form      = form
         self.body      = body
         self.headers   = headers
     }}
@@ -121,16 +146,18 @@ class __Response {{
     func init() {{
         self.status  = 200
         self.body    = ""
+        self.headers = {{}}
     }}
 }}
 
-var request  = __Request({method_lit}, {path_lit}, {query_str_lit}, {query_dict}, {body_lit}, {headers_dict})
+var request  = __Request({method_lit}, {path_lit}, {query_str_lit}, {query_dict}, {form_dict}, {body_lit}, {headers_dict})
 var response = __Response()
 "#,
         method_lit    = escape_pitruck_str(method),
         path_lit      = escape_pitruck_str(path),
         query_str_lit = escape_pitruck_str(query),
         query_dict    = query_dict,
+        form_dict     = form_dict,
         body_lit      = escape_pitruck_str(body),
         headers_dict  = headers_dict,
     );
@@ -160,6 +187,7 @@ var response = __Response()
     if let Some(sp) = script_path {
         vm.set_script_path(sp);
     }
+    vm.set_sandboxed(true);
     if let Err(e) = vm.run(&program) {
         if debug { eprintln!("[pitruck] runtime error: {e}"); }
         return (500, format!("<pre>Runtime Error\n{e}</pre>"), vec![]);
@@ -176,7 +204,7 @@ var response = __Response()
 }
 
 fn escape_str(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
+    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r")
 }
 
 fn escape_pitruck_str(s: &str) -> String {
@@ -264,6 +292,101 @@ fn parse_content_length(headers: &str) -> Option<usize> {
     None
 }
 
+struct ServerConfig {
+    target: String,
+    is_dir: bool,
+    debug:  bool,
+}
+
+fn handle_connection(mut stream: std::net::TcpStream, cfg: Arc<ServerConfig>) {
+    let raw = read_http_request(&mut stream);
+    let mut lines = raw.lines();
+
+    let request_line = lines.next().unwrap_or("GET / HTTP/1.1");
+    let mut parts  = request_line.split_whitespace();
+    let method     = parts.next().unwrap_or("GET").to_string();
+    let full_path  = parts.next().unwrap_or("/").to_string();
+
+    let (route, query) = if let Some(pos) = full_path.find('?') {
+        (full_path[..pos].to_string(), full_path[pos + 1..].to_string())
+    } else {
+        (full_path.clone(), String::new())
+    };
+    let route = httpclient::url_decode(&route);
+
+    let mut headers: Vec<String> = Vec::new();
+    for hl in lines.by_ref() {
+        if hl.is_empty() || hl == "\r" { break; }
+        headers.push(hl.trim_end().to_string());
+    }
+    let body: String = lines.collect::<Vec<_>>().join("\n").trim_matches('\0').to_string();
+
+    let (source, script_path) = if cfg.is_dir {
+        let candidate = format!("{}{}.pr", cfg.target.trim_end_matches('/'), route);
+        let fallback  = format!("{}/index.pr", cfg.target.trim_end_matches('/'));
+        if std::path::Path::new(&candidate).exists() {
+            let src = fs::read_to_string(&candidate).unwrap_or_default();
+            (src, candidate)
+        } else if std::path::Path::new(&fallback).exists() {
+            let src = fs::read_to_string(&fallback).unwrap_or_default();
+            (src, fallback)
+        } else {
+            ("response.status = 404\nresponse.body = \"404 Not Found\"".to_string(), String::new())
+        }
+    } else {
+        match fs::read_to_string(&cfg.target) {
+            Ok(s)  => (s, cfg.target.clone()),
+            Err(e) => { eprintln!("Cannot read '{}': {}", cfg.target, e); return; }
+        }
+    };
+
+    let sp = if script_path.is_empty() { None } else { Some(script_path.as_str()) };
+
+    let t0 = Instant::now();
+    let (status_code, html, extra_headers) =
+        serve_request(&source, sp, &method, &route, &query, &body, &headers, cfg.debug);
+    let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+
+    let status_text = match status_code {
+        200 => "OK", 201 => "Created", 204 => "No Content",
+        301 => "Moved Permanently", 302 => "Found",
+        400 => "Bad Request", 401 => "Unauthorized",
+        403 => "Forbidden", 404 => "Not Found",
+        500 => "Internal Server Error", _ => "OK",
+    };
+
+    let content_type = extra_headers.iter()
+        .find(|(k, _)| k.to_lowercase() == "content-type")
+        .map(|(_, v)| v.as_str())
+        .unwrap_or_else(|| {
+            if html.trim_start().starts_with("<!DOCTYPE") || html.trim_start().starts_with('<') {
+                "text/html; charset=utf-8"
+            } else {
+                "text/plain; charset=utf-8"
+            }
+        });
+
+    let mut response = format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
+        status_code, status_text, content_type, html.len()
+    );
+    for (k, v) in &extra_headers {
+        if k.to_lowercase() != "content-type" {
+            response.push_str(&format!("{}: {}\r\n", k, v));
+        }
+    }
+    response.push_str(&format!("\r\n{}", html));
+
+    if let Err(e) = stream.write_all(response.as_bytes()) {
+        eprintln!("[write] {e}");
+    }
+    if let Err(e) = stream.flush() {
+        eprintln!("[flush] {e}");
+    }
+
+    println!("[{}] {} {} ({:.1}ms)", status_code, method, route, elapsed_ms);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -302,7 +425,7 @@ fn main() {
                 std::process::exit(1);
             }
 
-            let target = &args[2];
+            let target = args[2].clone();
             let port = args.iter()
                 .position(|a| a == "--port")
                 .and_then(|i| args.get(i + 1))
@@ -315,7 +438,7 @@ fn main() {
                 Err(e) => { eprintln!("Cannot bind to {addr}: {e}"); std::process::exit(1); }
             };
 
-            let is_dir = fs::metadata(target).map(|m| m.is_dir()).unwrap_or(false);
+            let is_dir = fs::metadata(&target).map(|m| m.is_dir()).unwrap_or(false);
 
             println!("Pitruck Server  -  http://localhost:{}", port);
             if is_dir {
@@ -324,98 +447,19 @@ fn main() {
                 println!("Handler         -  {}", target);
             }
             if debug { println!("Mode            -  debug"); }
+            println!("Concurrency     -  one thread per connection");
+
+            let cfg = Arc::new(ServerConfig { target, is_dir, debug });
 
             for stream in listener.incoming() {
-                let mut stream = match stream {
+                let stream = match stream {
                     Ok(s)  => s,
                     Err(e) => { eprintln!("[accept] {e}"); continue; }
                 };
-
-                let raw = read_http_request(&mut stream);
-                let mut lines = raw.lines();
-
-                let request_line = lines.next().unwrap_or("GET / HTTP/1.1");
-                let mut parts  = request_line.split_whitespace();
-                let method     = parts.next().unwrap_or("GET").to_string();
-                let full_path  = parts.next().unwrap_or("/").to_string();
-
-                let (route, query) = if let Some(pos) = full_path.find('?') {
-                    (full_path[..pos].to_string(), full_path[pos + 1..].to_string())
-                } else {
-                    (full_path.clone(), String::new())
-                };
-
-                let mut headers: Vec<String> = Vec::new();
-                for hl in lines.by_ref() {
-                    if hl.is_empty() || hl == "\r" { break; }
-                    headers.push(hl.trim_end().to_string());
-                }
-                let body: String = lines.collect::<Vec<_>>().join("\n").trim_matches('\0').to_string();
-
-                let (source, script_path) = if is_dir {
-                    let candidate = format!("{}{}.pr", target.trim_end_matches('/'), route);
-                    let fallback  = format!("{}/index.pr", target.trim_end_matches('/'));
-                    if std::path::Path::new(&candidate).exists() {
-                        let src = fs::read_to_string(&candidate).unwrap_or_default();
-                        (src, candidate)
-                    } else if std::path::Path::new(&fallback).exists() {
-                        let src = fs::read_to_string(&fallback).unwrap_or_default();
-                        (src, fallback)
-                    } else {
-                        ("response.status = 404\nresponse.body = \"404 Not Found\"".to_string(), String::new())
-                    }
-                } else {
-                    match fs::read_to_string(target) {
-                        Ok(s)  => (s, target.clone()),
-                        Err(e) => { eprintln!("Cannot read '{}': {}", target, e); continue; }
-                    }
-                };
-
-                let sp = if script_path.is_empty() { None } else { Some(script_path.as_str()) };
-
-                let t0 = Instant::now();
-                let (status_code, html, extra_headers) =
-                    serve_request(&source, sp, &method, &route, &query, &body, &headers, debug);
-                let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-
-                let status_text = match status_code {
-                    200 => "OK", 201 => "Created", 204 => "No Content",
-                    301 => "Moved Permanently", 302 => "Found",
-                    400 => "Bad Request", 401 => "Unauthorized",
-                    403 => "Forbidden", 404 => "Not Found",
-                    500 => "Internal Server Error", _ => "OK",
-                };
-
-                let content_type = extra_headers.iter()
-                    .find(|(k, _)| k.to_lowercase() == "content-type")
-                    .map(|(_, v)| v.as_str())
-                    .unwrap_or_else(|| {
-                        if html.trim_start().starts_with("<!DOCTYPE") || html.trim_start().starts_with('<') {
-                            "text/html; charset=utf-8"
-                        } else {
-                            "text/plain; charset=utf-8"
-                        }
-                    });
-
-                let mut response = format!(
-                    "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
-                    status_code, status_text, content_type, html.len()
-                );
-                for (k, v) in &extra_headers {
-                    if k.to_lowercase() != "content-type" {
-                        response.push_str(&format!("{}: {}\r\n", k, v));
-                    }
-                }
-                response.push_str(&format!("\r\n{}", html));
-
-                if let Err(e) = stream.write_all(response.as_bytes()) {
-                    eprintln!("[write] {e}");
-                }
-                if let Err(e) = stream.flush() {
-                    eprintln!("[flush] {e}");
-                }
-
-                println!("[{}] {} {} ({:.1}ms)", status_code, method, route, elapsed_ms);
+                let cfg = cfg.clone();
+                std::thread::spawn(move || {
+                    handle_connection(stream, cfg);
+                });
             }
         }
 

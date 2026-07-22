@@ -2,3 +2,4 @@ target/
 Cargo.lock
 index.pr
 .idea/
+documentation/standard_reference_manual.md

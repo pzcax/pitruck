@@ -37,6 +37,10 @@ pub enum Token {
     LtEq,
     GtEq,
     Eq,
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
 
     LBrace,
     RBrace,

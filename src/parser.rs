@@ -58,7 +58,7 @@ impl Parser {
             }),
         }
     }
-    
+
     fn parse_body(&mut self) -> Result<Vec<Stmt>, PitruckError> {
         if matches!(self.peek(), Token::LBrace) {
             self.advance();
@@ -167,6 +167,24 @@ impl Parser {
             }
             _ => {
                 let expr = self.parse_expr()?;
+                let compound_op = match self.peek() {
+                    Token::PlusEq  => Some(BinOpKind::Add),
+                    Token::MinusEq => Some(BinOpKind::Sub),
+                    Token::StarEq  => Some(BinOpKind::Mul),
+                    Token::SlashEq => Some(BinOpKind::Div),
+                    _ => None,
+                };
+                if let Some(op) = compound_op {
+                    self.advance();
+                    let rhs = self.parse_expr()?;
+                    let value = Expr::BinOp { op, left: Box::new(expr.clone()), right: Box::new(rhs), line };
+                    return match expr {
+                        Expr::Ident { name, hash, line }       => Ok(Stmt::Assign { name, hash, value, line }),
+                        Expr::Get { object, name, line }       => Ok(Stmt::Set { object: *object, name, value, line }),
+                        Expr::IndexGet { object, index, line } => Ok(Stmt::IndexSet { object: *object, index: *index, value, line }),
+                        _ => Err(PitruckError::ParseError { line, col, message: "invalid assignment target".to_string() }),
+                    };
+                }
                 if matches!(self.peek(), Token::Eq) {
                     self.advance();
                     let value = self.parse_expr()?;
@@ -185,7 +203,7 @@ impl Parser {
 
     fn parse_if(&mut self) -> Result<Stmt, PitruckError> {
         let (line, _) = self.span();
-        self.advance(); 
+        self.advance();
         let condition   = self.parse_expr()?;
         let then_branch = self.parse_body()?;
         let mut elif_branches = Vec::new();
@@ -496,6 +514,10 @@ fn token_display(t: &Token) -> String {
         Token::LtEq         => "<=".to_string(),
         Token::GtEq         => ">=".to_string(),
         Token::Eq           => "=".to_string(),
+        Token::PlusEq       => "+=".to_string(),
+        Token::MinusEq      => "-=".to_string(),
+        Token::StarEq       => "*=".to_string(),
+        Token::SlashEq      => "/=".to_string(),
         Token::LBrace       => "{".to_string(),
         Token::RBrace       => "}".to_string(),
         Token::LParen       => "(".to_string(),

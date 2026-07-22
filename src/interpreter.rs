@@ -1,6 +1,8 @@
 use crate::ast::*;
 use crate::value::Value;
 use crate::error::PitruckError;
+use crate::json;
+use crate::httpclient;
 use std::collections::HashSet;
 use ahash::AHashMap as HashMap;
 use std::io::{self, Write, BufRead};
@@ -184,6 +186,15 @@ impl Interpreter {
         self.rand_seed
     }
 
+    fn compare_values(a: &Value, b: &Value) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        match (a, b) {
+            (Value::Number(x), Value::Number(y)) => x.partial_cmp(y).unwrap_or(Ordering::Equal),
+            (Value::Str(x), Value::Str(y)) => x.cmp(y),
+            _ => format!("{}", a).cmp(&format!("{}", b)),
+        }
+    }
+
     fn call_builtin(&mut self, name: &str, args: &[Value], line: usize) -> Option<Result<Value, PitruckError>> {
         let arity_err = |expected: usize| PitruckError::RuntimeError {
             line,
@@ -340,6 +351,21 @@ impl Interpreter {
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "values requires a dict".to_string() })),
                 }
             }
+            "remove" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match (&args[0], &args[1]) {
+                    (Value::Dict(d), Value::Str(key)) => {
+                        Some(Ok(d.borrow_mut().remove(key.as_str()).unwrap_or(Value::Null)))
+                    }
+                    (Value::List(l), Value::Number(n)) => {
+                        let i = *n as usize;
+                        let mut list = l.borrow_mut();
+                        if i < list.len() { Some(Ok(list.remove(i))) }
+                        else { Some(Err(PitruckError::RuntimeError { line, message: format!("list index {i} out of bounds (len {})", list.len()) })) }
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "remove requires (dict, string) or (list, number)".to_string() })),
+                }
+            }
             "split" => {
                 if args.len() != 2 { return Some(Err(arity_err(2))); }
                 match (&args[0], &args[1]) {
@@ -441,9 +467,246 @@ impl Interpreter {
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "char_at requires (string, number)".to_string() })),
                 }
             }
+            "pad_left" => {
+                if args.len() != 3 { return Some(Err(arity_err(3))); }
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::Str(s), Value::Number(width), Value::Str(fill)) => {
+                        let fill_char = fill.chars().next().unwrap_or(' ');
+                        let target = *width as usize;
+                        let cur = s.chars().count();
+                        if cur >= target { Some(Ok(Value::Str(s.clone()))) }
+                        else {
+                            let pad: String = std::iter::repeat(fill_char).take(target - cur).collect();
+                            Some(Ok(Value::Str(pad + s)))
+                        }
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "pad_left requires (string, number, string)".to_string() })),
+                }
+            }
+            "pad_right" => {
+                if args.len() != 3 { return Some(Err(arity_err(3))); }
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::Str(s), Value::Number(width), Value::Str(fill)) => {
+                        let fill_char = fill.chars().next().unwrap_or(' ');
+                        let target = *width as usize;
+                        let cur = s.chars().count();
+                        if cur >= target { Some(Ok(Value::Str(s.clone()))) }
+                        else {
+                            let pad: String = std::iter::repeat(fill_char).take(target - cur).collect();
+                            Some(Ok(Value::Str(s.clone() + &pad)))
+                        }
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "pad_right requires (string, number, string)".to_string() })),
+                }
+            }
+            "repeat_str" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match (&args[0], &args[1]) {
+                    (Value::Str(s), Value::Number(n)) => Some(Ok(Value::Str(s.repeat((*n).max(0.0) as usize)))),
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "repeat_str requires (string, number)".to_string() })),
+                }
+            }
+            "index_of" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match &args[0] {
+                    Value::Str(s) => match &args[1] {
+                        Value::Str(needle) => {
+                            let idx = s.find(needle.as_str()).map(|byte_i| s[..byte_i].chars().count() as f64).unwrap_or(-1.0);
+                            Some(Ok(Value::Number(idx)))
+                        }
+                        _ => Some(Err(PitruckError::RuntimeError { line, message: "index_of on a string requires a string needle".to_string() })),
+                    },
+                    Value::List(l) => {
+                        let pos = l.borrow().iter().position(|v| self.values_equal(v, &args[1]));
+                        Some(Ok(Value::Number(pos.map(|p| p as f64).unwrap_or(-1.0))))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "index_of requires a string or list".to_string() })),
+                }
+            }
+            "list_slice" => {
+                if args.len() != 3 { return Some(Err(arity_err(3))); }
+                match (&args[0], &args[1], &args[2]) {
+                    (Value::List(l), Value::Number(start), Value::Number(end)) => {
+                        let list = l.borrow();
+                        let s = (*start as usize).min(list.len());
+                        let e = (*end as usize).min(list.len());
+                        if s > e { return Some(Err(PitruckError::RuntimeError { line, message: "list_slice start must be <= end".to_string() })); }
+                        Some(Ok(Value::List(Rc::new(RefCell::new(list[s..e].to_vec())))))
+                    }
+                    (Value::Str(s), Value::Number(start), Value::Number(end)) => {
+                        let chars: Vec<char> = s.chars().collect();
+                        let st = (*start as usize).min(chars.len());
+                        let en = (*end as usize).min(chars.len());
+                        if st > en { return Some(Err(PitruckError::RuntimeError { line, message: "list_slice start must be <= end".to_string() })); }
+                        Some(Ok(Value::Str(chars[st..en].iter().collect())))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "list_slice requires (list|string, number, number)".to_string() })),
+                }
+            }
+            "list_reverse" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::List(l) => {
+                        let mut items = l.borrow().clone();
+                        items.reverse();
+                        Some(Ok(Value::List(Rc::new(RefCell::new(items)))))
+                    }
+                    Value::Str(s) => Some(Ok(Value::Str(s.chars().rev().collect()))),
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "list_reverse requires a list or string".to_string() })),
+                }
+            }
+            "list_sort" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::List(l) => {
+                        let mut items = l.borrow().clone();
+                        items.sort_by(Self::compare_values);
+                        Some(Ok(Value::List(Rc::new(RefCell::new(items)))))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "list_sort requires a list".to_string() })),
+                }
+            }
+            "list_sort_by" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                let list_val = match &args[0] {
+                    Value::List(l) => l.clone(),
+                    _ => return Some(Err(PitruckError::RuntimeError { line, message: "list_sort_by requires a list as the first argument".to_string() })),
+                };
+                let cmp_fn = args[1].clone();
+                let mut items = list_val.borrow().clone();
+                for i in 1..items.len() {
+                    let mut j = i;
+                    while j > 0 {
+                        let result = match self.call_value(cmp_fn.clone(), vec![items[j - 1].clone(), items[j].clone()], line) {
+                            Ok(v) => v,
+                            Err(e) => return Some(Err(e)),
+                        };
+                        let should_swap = match result {
+                            Value::Number(n) => n > 0.0,
+                            _ => return Some(Err(PitruckError::RuntimeError { line, message: "list_sort_by comparator must return a number".to_string() })),
+                        };
+                        if should_swap { items.swap(j - 1, j); j -= 1; } else { break; }
+                    }
+                }
+                Some(Ok(Value::List(Rc::new(RefCell::new(items)))))
+            }
+            "list_map" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                let list_val = match &args[0] {
+                    Value::List(l) => l.clone(),
+                    _ => return Some(Err(PitruckError::RuntimeError { line, message: "list_map requires a list as the first argument".to_string() })),
+                };
+                let func = args[1].clone();
+                let items = list_val.borrow().clone();
+                let mut out = Vec::with_capacity(items.len());
+                for item in items {
+                    match self.call_value(func.clone(), vec![item], line) {
+                        Ok(v) => out.push(v),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
+                Some(Ok(Value::List(Rc::new(RefCell::new(out)))))
+            }
+            "list_filter" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                let list_val = match &args[0] {
+                    Value::List(l) => l.clone(),
+                    _ => return Some(Err(PitruckError::RuntimeError { line, message: "list_filter requires a list as the first argument".to_string() })),
+                };
+                let func = args[1].clone();
+                let items = list_val.borrow().clone();
+                let mut out = Vec::new();
+                for item in items {
+                    match self.call_value(func.clone(), vec![item.clone()], line) {
+                        Ok(v) => if v.is_truthy() { out.push(item); },
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
+                Some(Ok(Value::List(Rc::new(RefCell::new(out)))))
+            }
+            "list_reduce" => {
+                if args.len() != 3 { return Some(Err(arity_err(3))); }
+                let list_val = match &args[0] {
+                    Value::List(l) => l.clone(),
+                    _ => return Some(Err(PitruckError::RuntimeError { line, message: "list_reduce requires a list as the first argument".to_string() })),
+                };
+                let func = args[1].clone();
+                let mut acc = args[2].clone();
+                let items = list_val.borrow().clone();
+                for item in items {
+                    match self.call_value(func.clone(), vec![acc.clone(), item], line) {
+                        Ok(v) => acc = v,
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
+                Some(Ok(acc))
+            }
+            "json_encode" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match json::to_json(&args[0]) {
+                    Ok(s)  => Some(Ok(Value::Str(s))),
+                    Err(e) => Some(Err(PitruckError::RuntimeError { line, message: e })),
+                }
+            }
+            "json_decode" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(s) => match json::parse_json(s) {
+                        Ok(v)  => Some(Ok(v)),
+                        Err(e) => Some(Err(PitruckError::RuntimeError { line, message: format!("json_decode: {e}") })),
+                    },
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "json_decode requires a string".to_string() })),
+                }
+            }
+            "url_encode" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(s) => Some(Ok(Value::Str(httpclient::url_encode(s)))),
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "url_encode requires a string".to_string() })),
+                }
+            }
+            "url_decode" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(s) => Some(Ok(Value::Str(httpclient::url_decode(s)))),
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "url_decode requires a string".to_string() })),
+                }
+            }
+            "http_request" => {
+                if self.sandboxed { return Some(Err(PitruckError::RuntimeError { line, message: "outbound network access is not allowed in this context".to_string() })); }
+                if args.len() != 4 { return Some(Err(arity_err(4))); }
+                let method = match &args[0] { Value::Str(s) => s.clone(), _ => return Some(Err(PitruckError::RuntimeError { line, message: "http_request method must be a string".to_string() })) };
+                let url    = match &args[1] { Value::Str(s) => s.clone(), _ => return Some(Err(PitruckError::RuntimeError { line, message: "http_request url must be a string".to_string() })) };
+                let body   = match &args[2] { Value::Str(s) => Some(s.clone()), Value::Null => None, _ => return Some(Err(PitruckError::RuntimeError { line, message: "http_request body must be a string".to_string() })) };
+                let mut hdrs = Vec::new();
+                if let Value::Dict(d) = &args[3] {
+                    for (k, v) in d.borrow().iter() {
+                        hdrs.push((k.clone(), format!("{}", v)));
+                    }
+                }
+                match httpclient::request(&method, &url, body.as_deref(), &hdrs) {
+                    Ok(resp) => {
+                        let mut result: HashMap<String, Value> = HashMap::new();
+                        result.insert("status".to_string(), Value::Number(resp.status as f64));
+                        result.insert("ok".to_string(), Value::Bool(resp.status >= 200 && resp.status < 300));
+                        result.insert("body".to_string(), Value::Str(resp.body));
+                        let mut headers_map: HashMap<String, Value> = HashMap::new();
+                        for (k, v) in resp.headers {
+                            headers_map.insert(k, Value::Str(v));
+                        }
+                        result.insert("headers".to_string(), Value::Dict(Rc::new(RefCell::new(headers_map))));
+                        Some(Ok(Value::Dict(Rc::new(RefCell::new(result)))))
+                    }
+                    Err(e) => Some(Err(PitruckError::RuntimeError { line, message: format!("http_request failed: {e}") })),
+                }
+            }
             "time"     => {
                 let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
                 Some(Ok(Value::Str(format!("{:02}:{:02}:{:02}", (secs / 3600) % 24, (secs % 3600) / 60, secs % 60))))
+            }
+            "timestamp" => {
+                let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                Some(Ok(Value::Number(secs as f64)))
             }
             "sys_os"   => Some(Ok(Value::Str(std::env::consts::OS.to_string()))),
             "sys_exit" => {
@@ -490,6 +753,13 @@ impl Interpreter {
                         }
                     }
                     _ => Some(Err(PitruckError::RuntimeError { line, message: "sys_readfile(path) requires a string".to_string() })),
+                }
+            }
+            "sys_fileexists" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(path) => Some(Ok(Value::Bool(Path::new(path.as_str()).exists()))),
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "sys_fileexists(path) requires a string".to_string() })),
                 }
             }
             "math_abs"  => {
@@ -559,14 +829,7 @@ impl Interpreter {
     }
 
     fn assign_hash(&mut self, hash: u64, name: &str, val: Value, line: usize) -> Result<(), PitruckError> {
-        let frame_start = *self.scope_tops.first().unwrap_or(&0);
-        for (k, v) in self.vars[frame_start..].iter_mut().rev() {
-            if *k == hash {
-                *v = val;
-                return Ok(());
-            }
-        }
-        for (k, v) in self.vars[..frame_start].iter_mut().rev() {
+        for (k, v) in self.vars.iter_mut().rev() {
             if *k == hash {
                 *v = val;
                 return Ok(());
@@ -580,11 +843,7 @@ impl Interpreter {
     }
 
     fn lookup_hash(&self, hash: u64, name: &str, line: usize) -> Result<Value, PitruckError> {
-        let frame_start = *self.scope_tops.first().unwrap_or(&0);
-        for (k, v) in self.vars[frame_start..].iter().rev() {
-            if *k == hash { return Ok(v.clone()); }
-        }
-        for (k, v) in self.vars[..frame_start].iter().rev() {
+        for (k, v) in self.vars.iter().rev() {
             if *k == hash { return Ok(v.clone()); }
         }
         Err(PitruckError::RuntimeError { line, message: format!("undefined variable '{name}'") })
@@ -595,13 +854,13 @@ impl Interpreter {
     }
 
     #[inline]
-        fn push_scope(&mut self) { self.scope_tops.push(self.vars.len()); }
+    fn push_scope(&mut self) { self.scope_tops.push(self.vars.len()); }
 
-        #[inline]
-        fn pop_scope(&mut self) {
-            let top = self.scope_tops.pop().unwrap_or(0);
-            self.vars.truncate(top);
-        }
+    #[inline]
+    fn pop_scope(&mut self) {
+        let top = self.scope_tops.pop().unwrap_or(0);
+        self.vars.truncate(top);
+    }
 
     fn exec_stmt(&mut self, stmt: &Stmt) -> Result<Signal, PitruckError> {
         match stmt {
@@ -701,11 +960,20 @@ impl Interpreter {
                 }
 
                 let mut lexer  = crate::lexer::Lexer::new(&source);
-                let tokens     = lexer.tokenize()?;
+                let tokens     = lexer.tokenize().map_err(|e| PitruckError::RuntimeError {
+                    line: *line,
+                    message: format!("while loading module '{}' ({}): {}", module, resolved.display(), e),
+                })?;
                 let mut parser = crate::parser::Parser::new(tokens);
-                let mut program = parser.parse_program()?;
+                let mut program = parser.parse_program().map_err(|e| PitruckError::RuntimeError {
+                    line: *line,
+                    message: format!("while loading module '{}' ({}): {}", module, resolved.display(), e),
+                })?;
                 crate::compiler::resolve_program(&mut program);
-                self.run(&program)?;
+                self.run(&program).map_err(|e| PitruckError::RuntimeError {
+                    line: *line,
+                    message: format!("while running module '{}' ({}): {}", module, resolved.display(), e),
+                })?;
 
                 self.script_dir = saved_script_dir;
 
@@ -829,6 +1097,108 @@ impl Interpreter {
         Ok(Signal::None)
     }
 
+    fn call_value(&mut self, callee_val: Value, evaluated_args: Vec<Value>, line: usize) -> Result<Value, PitruckError> {
+        match callee_val {
+            Value::Function { params, body, captured, is_closure, .. } => {
+                if evaluated_args.len() != params.len() {
+                    return Err(PitruckError::RuntimeError {
+                        line,
+                        message: format!("expected {} arg(s), got {}", params.len(), evaluated_args.len()),
+                    });
+                }
+                if !is_closure {
+                    let scope_base = self.vars.len();
+                    self.scope_tops.push(scope_base);
+                    self.vars.reserve(params.len());
+                    for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.vars.push((*ph, arg)); }
+                    let mut ret = Value::Null;
+                    'call: for s in body.iter() {
+                        if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
+                    }
+                    let top = self.scope_tops.pop().unwrap_or(0);
+                    self.vars.truncate(top);
+                    Ok(ret)
+                } else {
+                    let saved = self.vars.clone();
+                    let saved_tops = self.scope_tops.clone();
+                    let mut env = captured.borrow().clone();
+                    for (k, v) in &self.vars {
+                        if !env.iter().any(|(ek, _)| ek == k) {
+                            env.push((*k, v.clone()));
+                        }
+                    }
+                    self.vars = env;
+                    self.scope_tops = vec![self.vars.len()];
+                    self.push_scope();
+                    for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
+                    let mut ret = Value::Null;
+                    'call: for s in body.iter() {
+                        if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
+                    }
+                    let original_len = captured.borrow().len();
+                    let updated: Vec<(u64, Value)> = self.vars[..original_len].to_vec();
+                    *captured.borrow_mut() = updated;
+                    self.pop_scope();
+                    self.vars = saved;
+                    self.scope_tops = saved_tops;
+                    Ok(ret)
+                }
+            }
+            Value::Class { name, methods } => {
+                let fields = Rc::new(RefCell::new(HashMap::new()));
+                let instance = Value::Instance {
+                    class_name: name.clone(),
+                    fields: fields.clone(),
+                    methods: methods.clone(),
+                };
+                if let Some(Value::Function { params, body, .. }) = methods.get("init") {
+                    let body = body.clone();
+                    if evaluated_args.len() != params.len() {
+                        return Err(PitruckError::RuntimeError {
+                            line,
+                            message: format!("{name}.init expected {} arg(s), got {}", params.len(), evaluated_args.len()),
+                        });
+                    }
+                    self.push_scope();
+                    self.define("self", instance.clone());
+                    for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
+                    for s in body.iter() {
+                        if let Signal::Return(_) = self.exec_stmt(s)? { break; }
+                    }
+                    self.pop_scope();
+                } else if !evaluated_args.is_empty() {
+                    return Err(PitruckError::RuntimeError {
+                        line,
+                        message: format!("{name} has no init, but {} argument(s) were passed", evaluated_args.len()),
+                    });
+                }
+                Ok(instance)
+            }
+            Value::BoundMethod { receiver, method } => {
+                if let Value::Function { params, body, .. } = *method {
+                    if evaluated_args.len() != params.len() {
+                        return Err(PitruckError::RuntimeError {
+                            line,
+                            message: format!("expected {} arg(s), got {}", params.len(), evaluated_args.len()),
+                        });
+                    }
+                    self.push_scope();
+                    self.define("self", *receiver);
+                    for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
+                    let mut ret = Value::Null;
+                    for s in body.iter() {
+                        if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break; }
+                    }
+                    self.pop_scope();
+                    Ok(ret)
+                } else {
+                    Err(PitruckError::RuntimeError { line, message: "invalid bound method".to_string() })
+                }
+            }
+            _ => Err(PitruckError::RuntimeError { line, message: "value is not callable (expected function or class)".to_string() })
+        }
+    }
+
     fn eval_expr(&mut self, expr: &Expr) -> Result<Value, PitruckError> {
         match expr {
             Expr::Number(n)    => Ok(Value::Number(*n)),
@@ -839,10 +1209,6 @@ impl Interpreter {
             Expr::Self_ { line }             => self.lookup_hash(crate::symbol::hash_name("self"), "self", *line),
 
             Expr::Lambda { params, body, .. } => {
-                let capture_vec: Vec<(u64, Value)> = self.vars.iter().map(|(_, v)| {
-                    (crate::symbol::hash_name("__invalid__"), v.clone())
-                }).collect();
-                let _ = capture_vec;
                 let mut named_capture: Vec<(u64, Value)> = Vec::new();
                 for (k, v) in &self.vars {
                     named_capture.push((*k, v.clone()));
@@ -962,109 +1328,7 @@ impl Interpreter {
                 }
 
                 let callee_val = self.eval_expr(callee)?;
-
-                match callee_val {
-                    Value::Function { params, body, captured, is_closure, .. } => {
-                        let body = body.clone();
-                        let captured = captured.clone();
-                        if evaluated_args.len() != params.len() {
-                            return Err(PitruckError::RuntimeError {
-                                line: *line,
-                                message: format!("expected {} arg(s), got {}", params.len(), evaluated_args.len()),
-                            });
-                        }
-                        if !is_closure {
-                            let scope_base = self.vars.len();
-                            self.scope_tops.push(scope_base);
-                            self.vars.reserve(params.len());
-                            for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.vars.push((*ph, arg)); }
-                            let mut ret = Value::Null;
-                            'call: for s in body.iter() {
-                                if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
-                            }
-                            let top = self.scope_tops.pop().unwrap_or(0);
-                            self.vars.truncate(top);
-                            Ok(ret)
-                        } else {
-                            let saved = self.vars.clone();
-                            let saved_tops = self.scope_tops.clone();
-                            let mut env = captured.borrow().clone();
-                            for (k, v) in &self.vars {
-                                if !env.iter().any(|(ek, _)| ek == k) {
-                                    env.push((*k, v.clone()));
-                                }
-                            }
-                            self.vars = env;
-                            self.scope_tops = vec![self.vars.len()];
-                            self.push_scope();
-                            for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
-                            let mut ret = Value::Null;
-                            'call: for s in body.iter() {
-                                if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break 'call; }
-                            }
-                            let original_len = captured.borrow().len();
-                            let updated: Vec<(u64, Value)> = self.vars[..original_len].to_vec();
-                            *captured.borrow_mut() = updated;
-                            self.pop_scope();
-                            self.vars = saved;
-                            self.scope_tops = saved_tops;
-                            Ok(ret)
-                        }
-                    }
-                    Value::Class { name, methods } => {
-                        let fields = Rc::new(RefCell::new(HashMap::new()));
-                        let instance = Value::Instance {
-                            class_name: name.clone(),
-                            fields: fields.clone(),
-                            methods: methods.clone(),
-                        };
-                        if let Some(Value::Function { params, body, .. }) = methods.get("init") {
-                            let body = body.clone();
-                            if evaluated_args.len() != params.len() {
-                                return Err(PitruckError::RuntimeError {
-                                    line: *line,
-                                    message: format!("{name}.init expected {} arg(s), got {}", params.len(), evaluated_args.len()),
-                                });
-                            }
-                            self.push_scope();
-                            self.define("self", instance.clone());
-                            for ((p, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
-                            for s in body.iter() {
-                                if let Signal::Return(_) = self.exec_stmt(s)? { break; }
-                            }
-                            self.pop_scope();
-                        } else if !evaluated_args.is_empty() {
-                            return Err(PitruckError::RuntimeError {
-                                line: *line,
-                                message: format!("{name} has no init, but {} argument(s) were passed", evaluated_args.len()),
-                            });
-                        }
-                        Ok(instance)
-                    }
-                    Value::BoundMethod { receiver, method } => {
-                        if let Value::Function { params, body, .. } = *method {
-                            let body = body.clone();
-                            if evaluated_args.len() != params.len() {
-                                return Err(PitruckError::RuntimeError {
-                                    line: *line,
-                                    message: format!("expected {} arg(s), got {}", params.len(), evaluated_args.len()),
-                                });
-                            }
-                            self.push_scope();
-                            self.define("self", *receiver);
-                            for ((_, ph), arg) in params.iter().zip(evaluated_args) { self.define_hash(*ph, arg); }
-                            let mut ret = Value::Null;
-                            for s in body.iter() {
-                                if let Signal::Return(v) = self.exec_stmt(s)? { ret = v; break; }
-                            }
-                            self.pop_scope();
-                            Ok(ret)
-                        } else {
-                            Err(PitruckError::RuntimeError { line: *line, message: "invalid bound method".to_string() })
-                        }
-                    }
-                    _ => Err(PitruckError::RuntimeError { line: *line, message: "value is not callable (expected function or class)".to_string() })
-                }
+                self.call_value(callee_val, evaluated_args, *line)
             }
         }
     }
@@ -1126,7 +1390,12 @@ impl Interpreter {
                     s.push_str(&b);
                     Ok(Value::Str(s))
                 }
-                _ => Err(type_err("'+' requires numbers or strings")),
+                (Value::List(a), Value::List(b)) => {
+                    let mut items = a.borrow().clone();
+                    items.extend(b.borrow().iter().cloned());
+                    Ok(Value::List(Rc::new(RefCell::new(items))))
+                }
+                _ => Err(type_err("'+' requires numbers, strings, or lists")),
             },
             BinOpKind::Sub => match (l, r) {
                 (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a - b)),

@@ -50,7 +50,7 @@ impl Lexer {
 
         match self.peek() {
             None => Ok((Token::EOF, line, col)),
-            
+
             Some('#') => {
                 while self.peek().is_some() && self.peek() != Some('\n') { self.advance(); }
                 self.next_token()
@@ -139,14 +139,28 @@ impl Lexer {
                 Ok((tok, line, col))
             }
 
-            Some('+') => { self.advance(); Ok((Token::Plus,    line, col)) }
-            Some('-') => { self.advance(); Ok((Token::Minus,   line, col)) }
-            Some('*') => { self.advance(); Ok((Token::Star,    line, col)) }
+            Some('+') => {
+                self.advance();
+                if self.peek() == Some('=') { self.advance(); Ok((Token::PlusEq, line, col)) }
+                else { Ok((Token::Plus, line, col)) }
+            }
+            Some('-') => {
+                self.advance();
+                if self.peek() == Some('=') { self.advance(); Ok((Token::MinusEq, line, col)) }
+                else { Ok((Token::Minus, line, col)) }
+            }
+            Some('*') => {
+                self.advance();
+                if self.peek() == Some('=') { self.advance(); Ok((Token::StarEq, line, col)) }
+                else { Ok((Token::Star, line, col)) }
+            }
             Some('/') => {
                 self.advance();
                 if self.peek() == Some('/') {
                     while self.peek().is_some() && self.peek() != Some('\n') { self.advance(); }
                     self.next_token()
+                } else if self.peek() == Some('=') {
+                    self.advance(); Ok((Token::SlashEq, line, col))
                 } else {
                     Ok((Token::Slash, line, col))
                 }
@@ -170,7 +184,7 @@ impl Lexer {
             Some('!') => {
                 self.advance();
                 if self.peek() == Some('=') { self.advance(); Ok((Token::BangEq, line, col)) }
-                else { Err(PitruckError::LexError { line, col, message: "unexpected '!' — did you mean '!='?".to_string() }) }
+                else { Err(PitruckError::LexError { line, col, message: "unexpected '!' -- did you mean '!='?".to_string() }) }
             }
             Some('<') => {
                 self.advance();
