@@ -1,6 +1,9 @@
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::Arc;
 use std::time::Duration;
+
+use webpki_roots;
 
 pub struct HttpResponse {
     pub status:  u16,
@@ -37,23 +40,10 @@ fn parse_url(url: &str) -> Result<ParsedUrl, String> {
     Ok(ParsedUrl { scheme: scheme.to_string(), host, port, path: path.to_string() })
 }
 
-pub fn request(method: &str, url: &str, body: Option<&str>, headers: &[(String, String)]) -> Result<HttpResponse, String> {
-    let parsed = parse_url(url)?;
-
-    if parsed.scheme == "https" {
-        return Err(
-            "https:// is not currently supported by this build's outbound HTTP client (no TLS backend); use http:// or a reverse proxy that terminates TLS".to_string()
-        );
-    }
-
-    let addr = format!("{}:{}", parsed.host, parsed.port);
-    let mut stream = TcpStream::connect(&addr).map_err(|e| format!("could not connect to {addr}: {e}"))?;
-    stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
-    stream.set_write_timeout(Some(Duration::from_secs(30))).ok();
-
+fn send_and_read<S: Read + Write>(mut stream: S, method: &str, parsed: &ParsedUrl, body: Option<&str>, headers: &[(String, String)]) -> Result<HttpResponse, String> {
     let body_bytes = body.unwrap_or("");
     let mut req = format!(
-        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: pitruck/1.5\r\n",
+        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nUser-Agent: pitruck/1.6\r\n",
         method.to_uppercase(), parsed.path, parsed.host
     );
 
@@ -72,6 +62,7 @@ pub fn request(method: &str, url: &str, body: Option<&str>, headers: &[(String, 
     req.push_str(body_bytes);
 
     stream.write_all(req.as_bytes()).map_err(|e| format!("failed writing request: {e}"))?;
+    stream.flush().map_err(|e| format!("failed flushing request: {e}"))?;
 
     let mut raw = Vec::new();
     stream.read_to_end(&mut raw).map_err(|e| format!("failed reading response: {e}"))?;
@@ -104,6 +95,39 @@ pub fn request(method: &str, url: &str, body: Option<&str>, headers: &[(String, 
     };
 
     Ok(HttpResponse { status, headers: resp_headers, body: body_string })
+}
+
+pub fn request(method: &str, url: &str, body: Option<&str>, headers: &[(String, String)]) -> Result<HttpResponse, String> {
+    let parsed = parse_url(url)?;
+
+    let addr = format!("{}:{}", parsed.host, parsed.port);
+    let mut tcp = TcpStream::connect(&addr).map_err(|e| format!("could not connect to {addr}: {e}"))?;
+    tcp.set_read_timeout(Some(Duration::from_secs(30))).ok();
+    tcp.set_write_timeout(Some(Duration::from_secs(30))).ok();
+
+    if parsed.scheme == "https" {
+        let config = make_tls_client_config();
+        let server_name = rustls::pki_types::ServerName::try_from(parsed.host.as_str())
+            .map_err(|e| format!("invalid TLS server name '{}': {}", parsed.host, e))?
+            .to_owned();
+        let mut tls = rustls::ClientConnection::new(Arc::new(config), server_name)
+            .map_err(|e| format!("failed to create TLS client: {e}"))?;
+        let mut stream = rustls::Stream::new(&mut tls, &mut tcp);
+        send_and_read(&mut stream, method, &parsed, body, headers)
+    } else {
+        send_and_read(&mut tcp, method, &parsed, body, headers)
+    }
+}
+
+fn make_tls_client_config() -> rustls::ClientConfig {
+    let mut root_store = rustls::RootCertStore::empty();
+    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+    rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_protocol_versions(rustls::DEFAULT_VERSIONS)
+        .expect("incompatible TLS protocol versions")
+        .with_root_certificates(root_store)
+        .with_no_client_auth()
 }
 
 fn decode_chunked(data: &[u8]) -> String {

@@ -152,6 +152,7 @@ class Trucky {
         return self.tag("div", "tk-toast", s, self.attr("id", id), html_escape(text))
     }
 
+    # Badges & Alerts
     func badge_primary(text) { return self.tag("span", "", "display:inline-flex; align-items:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.theme_p + "; color:" + self.bg + ";", "", html_escape(text)) }
     func badge_success(text) { return self.tag("span", "", "display:inline-flex; align-items:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.success + "20; color:" + self.success + ";", "", html_escape(text)) }
     func badge_warning(text) { return self.tag("span", "", "display:inline-flex; align-items:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.warning + "20; color:" + self.warning + ";", "", html_escape(text)) }
@@ -165,6 +166,7 @@ class Trucky {
         return self.tag("div", "", "padding:1rem; border-radius:" + self.radius + "; border-left:4px solid " + self.error + "; background:" + self.error + "10; color:" + self.text_m + "; margin-bottom:1rem;", "", c)
     }
 
+    # Forms & Inputs
     func label(text, id) { return self.tag("label", "", "display:block; font-size:0.875rem; font-weight:600; margin-bottom:0.5rem; color:" + self.text_m + ";", self.attr("for", id), html_escape(text)) }
     func _input_base(type, id, placeholder, val) { return self.tag_self("input", "", "width:100%; padding:0.625rem 1rem; font-size:0.875rem; border:1px solid " + self.border + "; border-radius:" + self.radius + "; background:" + self.bg + "; color:" + self.text_m + "; outline:none;", self.attr("type", type) + self.attr("id", id) + self.attr("placeholder", placeholder) + self.attr("value", val)) }
 
@@ -180,6 +182,7 @@ class Trucky {
     func form_group(label_text, input_html) { return self.tag("div", "", "margin-bottom:1.5rem;", "", self.label(label_text, "") + input_html) }
     func form(action, method, content) { return self.tag("form", "", "", self.attr("action", action) + self.attr("method", method), content) }
 
+    # Tables & Lists
     func table(headers_html, rows_html) { return self.tag("table", "", "width:100%; border-collapse:collapse; font-size:0.875rem;", "", self.tag("thead", "", "", "", headers_html) + self.tag("tbody", "", "", "", rows_html)) }
     func th(text) { return self.tag("th", "", "text-align:left; padding:0.75rem; border-bottom:1px solid " + self.border + ";", "", html_escape(text)) }
     func td(text) { return self.tag("td", "", "padding:0.75rem; border-bottom:1px solid " + self.border + ";", "", html_escape(text)) }

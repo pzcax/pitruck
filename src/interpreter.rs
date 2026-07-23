@@ -3,6 +3,7 @@ use crate::value::Value;
 use crate::error::PitruckError;
 use crate::json;
 use crate::httpclient;
+use crate::store::Store;
 use std::collections::HashSet;
 use ahash::AHashMap as HashMap;
 use std::io::{self, Write, BufRead};
@@ -11,6 +12,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 pub enum Signal {
     None,
     Return(Value),
@@ -25,9 +27,12 @@ pub struct Interpreter {
     start:          Instant,
     rand_seed:      u64,
     loaded_modules: HashSet<String>,
-    sandboxed:      bool,
+    allow_read:     bool,
+    allow_write:    bool,
+    allow_net:      bool,
     script_dir:     Option<PathBuf>,
     exe_dir:        Option<PathBuf>,
+    server_store:   Option<Arc<Store>>,
 }
 
 impl Interpreter {
@@ -47,12 +52,65 @@ impl Interpreter {
                 .unwrap()
                 .as_millis() as u64,
             loaded_modules: HashSet::new(),
-            sandboxed: false,
+            allow_read: false,
+            allow_write: false,
+            allow_net: false,
             script_dir: None,
+            server_store: None,
         }
     }
 
-    pub fn set_sandboxed(&mut self, v: bool) { self.sandboxed = v; }
+    pub fn set_permissions(&mut self, allow_read: bool, allow_write: bool, allow_net: bool) {
+        self.allow_read = allow_read;
+        self.allow_write = allow_write;
+        self.allow_net = allow_net;
+    }
+
+    pub fn set_server_store(&mut self, store: Arc<Store>) {
+        self.server_store = Some(store);
+    }
+    
+    pub fn inject_request_response(
+        &mut self,
+        method: &str,
+        path: &str,
+        query_str: &str,
+        query: HashMap<String, Value>,
+        form: HashMap<String, Value>,
+        body: &str,
+        headers: HashMap<String, Value>,
+    ) {
+        use crate::symbol::hash_name;
+        
+        let mut request_fields: HashMap<String, Value> = HashMap::new();
+        request_fields.insert("method".to_string(), Value::Str(method.to_string()));
+        request_fields.insert("path".to_string(), Value::Str(path.to_string()));
+        request_fields.insert("query_str".to_string(), Value::Str(query_str.to_string()));
+        request_fields.insert("query".to_string(), Value::Dict(Rc::new(RefCell::new(query))));
+        request_fields.insert("form".to_string(), Value::Dict(Rc::new(RefCell::new(form))));
+        request_fields.insert("body".to_string(), Value::Str(body.to_string()));
+        request_fields.insert("headers".to_string(), Value::Dict(Rc::new(RefCell::new(headers))));
+
+        let request = Value::Instance {
+            class_name: "__Request".to_string(),
+            fields: Rc::new(RefCell::new(request_fields)),
+            methods: HashMap::new(),
+        };
+
+        let mut response_fields: HashMap<String, Value> = HashMap::new();
+        response_fields.insert("status".to_string(), Value::Number(200.0));
+        response_fields.insert("body".to_string(), Value::Str(String::new()));
+        response_fields.insert("headers".to_string(), Value::Dict(Rc::new(RefCell::new(HashMap::new()))));
+
+        let response = Value::Instance {
+            class_name: "__Response".to_string(),
+            fields: Rc::new(RefCell::new(response_fields)),
+            methods: HashMap::new(),
+        };
+
+        self.vars.push((hash_name("request"), request));
+        self.vars.push((hash_name("response"), response));
+    }
 
     pub fn set_script_path(&mut self, path: &str) {
         let p = Path::new(path);
@@ -379,7 +437,11 @@ impl Interpreter {
                         let keys: Vec<Value> = d.borrow().keys().map(|k| Value::Str(k.clone())).collect();
                         Some(Ok(Value::List(Rc::new(RefCell::new(keys)))))
                     }
-                    _ => Some(Err(PitruckError::RuntimeError { line, message: "keys requires a dict".to_string() })),
+                    Value::Instance { fields, .. } => {
+                        let keys: Vec<Value> = fields.borrow().keys().map(|k| Value::Str(k.clone())).collect();
+                        Some(Ok(Value::List(Rc::new(RefCell::new(keys)))))
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "keys requires a dict or instance".to_string() })),
                 }
             }
             "values" => {
@@ -714,7 +776,7 @@ impl Interpreter {
                 }
             }
             "http_request" => {
-                if self.sandboxed { return Some(Err(PitruckError::RuntimeError { line, message: "outbound network access is not allowed in this context".to_string() })); }
+                if !self.allow_net { return Some(Err(PitruckError::RuntimeError { line, message: "outbound network access is not allowed in this context".to_string() })); }
                 if args.len() != 4 { return Some(Err(arity_err(4))); }
                 let method = match &args[0] { Value::Str(s) => s.clone(), _ => return Some(Err(PitruckError::RuntimeError { line, message: "http_request method must be a string".to_string() })) };
                 let url    = match &args[1] { Value::Str(s) => s.clone(), _ => return Some(Err(PitruckError::RuntimeError { line, message: "http_request url must be a string".to_string() })) };
@@ -771,7 +833,7 @@ impl Interpreter {
                 Some(Ok(Value::Str(val)))
             }
             "sys_writefile" => {
-                if self.sandboxed { return Some(Err(PitruckError::RuntimeError { line, message: "file I/O is not allowed in serve mode".to_string() })); }
+                if !self.allow_write { return Some(Err(PitruckError::RuntimeError { line, message: "file write access is not allowed in this context".to_string() })); }
                 if args.len() != 2 { return Some(Err(arity_err(2))); }
                 match (&args[0], &args[1]) {
                     (Value::Str(path), Value::Str(contents)) => {
@@ -784,7 +846,7 @@ impl Interpreter {
                 }
             }
             "sys_readfile" => {
-                if self.sandboxed { return Some(Err(PitruckError::RuntimeError { line, message: "file I/O is not allowed in serve mode".to_string() })); }
+                if !self.allow_read { return Some(Err(PitruckError::RuntimeError { line, message: "file read access is not allowed in this context".to_string() })); }
                 if args.len() != 1 { return Some(Err(arity_err(1))); }
                 match &args[0] {
                     Value::Str(path) => {
@@ -864,6 +926,71 @@ impl Interpreter {
                     Value::BoundMethod { .. } => "function",
                 };
                 Some(Ok(Value::Str(t.to_string())))
+            }
+            "server_set" => {
+                if args.len() != 2 { return Some(Err(arity_err(2))); }
+                match (&args[0], &args[1]) {
+                    (Value::Str(key), Value::Str(val)) => {
+                        if let Some(ref store) = self.server_store {
+                            store.set(key, val);
+                            Some(Ok(Value::Null))
+                        } else {
+                            Some(Err(PitruckError::RuntimeError { line, message: "server_set is only available in serve mode".to_string() }))
+                        }
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "server_set(key, value) requires two strings".to_string() })),
+                }
+            }
+            "server_get" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(key) => {
+                        if let Some(ref store) = self.server_store {
+                            match store.get(key) {
+                                Some(v) => Some(Ok(Value::Str(v))),
+                                None    => Some(Ok(Value::Null)),
+                            }
+                        } else {
+                            Some(Err(PitruckError::RuntimeError { line, message: "server_get is only available in serve mode".to_string() }))
+                        }
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "server_get(key) requires a string".to_string() })),
+                }
+            }
+            "server_has" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(key) => {
+                        if let Some(ref store) = self.server_store {
+                            Some(Ok(Value::Bool(store.has(key))))
+                        } else {
+                            Some(Err(PitruckError::RuntimeError { line, message: "server_has is only available in serve mode".to_string() }))
+                        }
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "server_has(key) requires a string".to_string() })),
+                }
+            }
+            "server_delete" => {
+                if args.len() != 1 { return Some(Err(arity_err(1))); }
+                match &args[0] {
+                    Value::Str(key) => {
+                        if let Some(ref store) = self.server_store {
+                            Some(Ok(Value::Bool(store.delete(key))))
+                        } else {
+                            Some(Err(PitruckError::RuntimeError { line, message: "server_delete is only available in serve mode".to_string() }))
+                        }
+                    }
+                    _ => Some(Err(PitruckError::RuntimeError { line, message: "server_delete(key) requires a string".to_string() })),
+                }
+            }
+            "server_keys" => {
+                if args.len() != 0 { return Some(Err(arity_err(0))); }
+                if let Some(ref store) = self.server_store {
+                    let keys: Vec<Value> = store.keys().iter().map(|k| Value::Str(k.clone())).collect();
+                    Some(Ok(Value::List(Rc::new(RefCell::new(keys)))))
+                } else {
+                    Some(Err(PitruckError::RuntimeError { line, message: "server_keys is only available in serve mode".to_string() }))
+                }
             }
             _ => None,
         }

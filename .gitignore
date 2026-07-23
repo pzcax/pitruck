@@ -1,5 +1,6 @@
 target/
 Cargo.lock
 index.pr
+test_https.pr
+.pitruck-tls/
 .idea/
-documentation/standard_reference_manual.md
