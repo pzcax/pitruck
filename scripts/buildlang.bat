@@ -18,6 +18,7 @@ IF NOT EXIST "Cargo.toml" (
         echo panic = "abort"
         echo strip = true
 
+        echo [dependencies]
         echo ahash = "0.8.12"
         echo rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
         echo webpki-roots = "0.26"
