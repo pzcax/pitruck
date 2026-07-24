@@ -1,7 +1,0 @@
-func struct_new(fields) {
-    return clone(fields)
-}
-
-func struct_copy(s) {
-    return clone(s)
-}

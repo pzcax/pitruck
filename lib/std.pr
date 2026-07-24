@@ -1,0 +1,166 @@
+class std {
+    // COLOR LIBRARY
+    // UPDATED 7/23/26
+    // PZCAX
+    func red(text) {
+        return "\x1b[31m" + text + "\x1b[0m"
+    }
+
+    func green(text) {
+        return "\x1b[32m" + text + "\x1b[0m"
+    }
+
+    func blue(text) {
+        return "\x1b[34m" + text + "\x1b[0m"
+    }
+
+    func yellow(text) {
+        return "\x1b[33m" + text + "\x1b[0m"
+    }
+
+    func cyan(text) {
+        return "\x1b[36m" + text + "\x1b[0m"
+    }
+
+    func magenta(text) {
+        return "\x1b[35m" + text + "\x1b[0m"
+    }
+
+    func white(text) {
+        return "\x1b[37m" + text + "\x1b[0m"
+    }
+
+    func black(text) {
+        return "\x1b[30m" + text + "\x1b[0m"
+    }
+
+    func bg_red(text) {
+        return "\x1b[41m" + text + "\x1b[0m"
+    }
+
+    func bg_green(text) {
+        return "\x1b[42m" + text + "\x1b[0m"
+    }
+
+    func bg_blue(text) {
+        return "\x1b[44m" + text + "\x1b[0m"
+    }
+
+    func bold(text) {
+        return "\x1b[1m" + text + "\x1b[0m"
+    }
+
+    func underline(text) {
+        return "\x1b[4m" + text + "\x1b[0m"
+    }
+
+    // MATH LIBRARY
+    // UPDATED 7/23/26
+    // PZCAX
+    func inc(x) {
+        return x+1
+    }
+
+    func abs(x) {
+        return math_abs(x)
+    }
+
+    func sqrt(x) {
+        return math_sqrt(x)
+    }
+
+    func pow(x, y) {
+        return math_pow(x, y)
+    }
+
+    func max(a, b) {
+        if a > b {
+            return a
+        }
+        return b
+    }
+
+    func min(a, b) {
+        if a < b {
+            return a
+        }
+        return b
+    }
+
+    // STRUCT LIBRARY
+    // UPDATED 7/23/26
+    // PZCAX   
+    func struct_new(fields) {
+        return clone(fields)
+    }
+
+    func struct_copy(s) {
+        return clone(s)
+    }
+
+    // SYSTEM LIBRARY
+    // UPDATED 7/23/26
+    // PZCAX   
+    func os() {
+        return sys_os()
+    }
+
+    func clear_screen() {
+        clear()
+    }
+
+    func exit(code) {
+        sys_exit(code)
+    }
+
+    func get_env(key) {
+        return sys_env(key)
+    }
+
+    func write_file(path, contents) {
+        return sys_writefile(path,contents)
+    }
+
+    func read_file(path) {
+        return sys_readfile(path)
+    }
+
+    // TIME LIBRARY
+    // UPDATED 7/23/26
+    // PZCAX   
+    func now() {
+        return time()
+    }
+
+    func sleep(ms) {
+        sys_sleep(ms)
+    }
+
+    // UUID LIBRARY
+    // UPDATED 7/23/26
+    // PZCAX
+    func v4() {
+        // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        var hex_chars = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
+        var y_chars = ["8", "9", "a", "b"]
+        
+        func get_hex(count) {
+            var res = ""
+            var i = 0
+            while i < count {
+                var idx = rand(0, 15)
+                res = res + hex_chars[idx]
+                i = i + 1
+            }
+            return res
+        }
+        
+        var p1 = get_hex(8)
+        var p2 = get_hex(4)
+        var p3 = "4" + get_hex(3)
+        var p4 = y_chars[rand(0, 3)] + get_hex(3)
+        var p5 = get_hex(12)
+        
+        return p1 + "-" + p2 + "-" + p3 + "-" + p4 + "-" + p5
+    }
+}
