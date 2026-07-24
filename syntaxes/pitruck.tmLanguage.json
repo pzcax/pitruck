@@ -151,7 +151,7 @@
       "patterns": [
         {
           "name": "support.function.builtin.pitruck",
-          "match": "\\b(rand|range|to_number|to_string|is_number|typeof|clone|math_abs|math_sqrt|math_pow|floor|ceil|round|len|split|trim|upper|lower|replace|starts_with|ends_with|substr|char_at|pad_left|pad_right|repeat_str|index_of|html_escape|push|pop|contains|keys|values|remove|join|list_slice|list_reverse|list_sort|list_sort_by|list_map|list_filter|list_reduce|json_encode|json_decode|url_encode|url_decode|time|timestamp|sys_os|sys_exit|sys_sleep|sys_env|sys_writefile|sys_readfile|sys_fileexists|http_request|input|clear)\\b"
+          "match": "\\b(rand|range|to_number|to_string|is_number|typeof|clone|math_abs|math_sqrt|math_pow|floor|ceil|round|len|split|trim|upper|lower|replace|starts_with|ends_with|substr|char_at|pad_left|pad_right|repeat_str|index_of|html_escape|push|pop|contains|keys|values|remove|join|list_slice|list_reverse|list_sort|list_sort_by|list_map|list_filter|list_reduce|json_encode|json_decode|url_encode|url_decode|time|timestamp|sys_os|sys_exit|sys_sleep|sys_env|sys_writefile|sys_readfile|sys_fileexists|http_request|input|clear|server_set|server_get|server_has|server_delete|server_keys)\\b"
         }
       ]
     },
