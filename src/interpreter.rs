@@ -129,7 +129,7 @@ impl Interpreter {
     }
 
     fn module_candidates(&self, module: &str) -> Vec<PathBuf> {
-        let mut candidates: Vec<PathBuf> = Vec::new();
+        let mut candidates = Vec::new();
 
         let names = if module.ends_with(".pr") {
             vec![module.to_string()]
@@ -140,36 +140,36 @@ impl Interpreter {
         for name in &names {
             let p = Path::new(name);
 
+            // Absolute path? Just use it.
             if p.is_absolute() {
                 candidates.push(p.to_path_buf());
                 continue;
             }
 
+            // Relative to the script being executed.
             if let Some(ref script_dir) = self.script_dir {
                 candidates.push(script_dir.join(name));
                 candidates.push(script_dir.join("lib").join(name));
             }
 
+            // Relative to the current working directory.
             candidates.push(PathBuf::from(name));
             candidates.push(PathBuf::from("lib").join(name));
 
-            if let Some(ref exe_dir) = self.exe_dir {
-                candidates.push(exe_dir.join("lib").join(name));
-
-                let mut global = exe_dir.clone();
-                for _ in 0..3 {
-                    global = match global.parent() {
-                        Some(p) => p.to_path_buf(),
-                        None    => break,
-                    };
-                }
-                candidates.push(global.join("lib").join(name));
+            // ~/.pitruck/pitruck-main/lib/
+            if let Some(home) = dirs::home_dir() {
+                candidates.push(
+                    home.join(".pitruck")
+                        .join("pitruck-main")
+                        .join("lib")
+                        .join(name),
+                );
             }
+
         }
 
         candidates
     }
-
     pub fn read_number(&self, name: &str) -> Option<f64> {
         let hash = crate::symbol::hash_name(name);
         for (k, v) in self.vars.iter().rev() {
@@ -1686,7 +1686,7 @@ impl Interpreter {
     }
 }
 
-fn obj_type_name(v: &Value) -> &'static str { // fuck fuck fuck fuck fix this 
+fn obj_type_name(v: &Value) -> &'static str { // fuck fuck fuck fuck fix this
     match v {
         Value::Number(_)         => "number",
         Value::Str(_)            => "string",

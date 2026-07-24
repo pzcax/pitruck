@@ -17,3 +17,4 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 webpki-roots = "0.26"
 rustls-pemfile = "2"
 rcgen = { version = "0.13", features = ["pem"] }
+dirs = "6"
