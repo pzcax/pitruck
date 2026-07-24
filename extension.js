@@ -53,7 +53,8 @@ function activate(context) {
                     'len', 'split', 'trim', 'upper', 'lower', 'replace', 'starts_with', 'ends_with',
                     'push', 'pop', 'contains', 'keys', 'values', 'remove', 'join',
                     'json_encode', 'json_decode', 'url_encode', 'url_decode',
-                    'time', 'timestamp', 'sys_os', 'sys_exit', 'sys_sleep', 'sys_env'
+                    'time', 'timestamp', 'sys_os', 'sys_exit', 'sys_sleep', 'sys_env', 'server_set', 'server_get',
+                    'server_has', 'server_delete', 'server_keys'
                 ];
 
                 builtins.forEach(fn => {
