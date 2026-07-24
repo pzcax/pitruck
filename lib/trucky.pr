@@ -1,3 +1,157 @@
+func _tk_is_state(value) {
+    if typeof(value) != "instance" { return false }
+    try {
+        var probe = value._state_marker
+        return true
+    } catch (e) {
+        return false
+    }
+}
+
+func _tk_void_tag(tag) {
+    var voids = ["input", "br", "hr", "img", "meta"]
+    return contains(voids, tag)
+}
+
+func _tk_el(tag, cls, style, attrs, children) {
+    return { "kind": "el", "tag": tag, "cls": cls, "style": style, "attrs": attrs, "children": children }
+}
+
+func _tk_render_attrs(attrs) {
+    var out = ""
+    for k in keys(attrs) {
+        out = out + " " + k + "='" + html_escape(to_string(attrs[k])) + "'"
+    }
+    return out
+}
+
+func _tk_render(node) {
+    if node == null { return "" }
+    if node.kind == "text" { return html_escape(to_string(node.value)) }
+    if node.kind == "state" { return html_escape(to_string(node.ref.get())) }
+    if node.kind == "raw" { return node.value }
+    if node.kind == "error_slot" {
+        var msg = node.app.error_for(node.field)
+        if msg == "" { return "" }
+        return "<div class='tk-field-error'>" + html_escape(msg) + "</div>"
+    }
+    if node.kind == "notice_slot" {
+        var n = node.app._notice
+        if n == null { return "" }
+        return "<div class='tk-alert tk-alert-" + n.kind + "'>" + html_escape(n.text) + "</div>"
+    }
+    var inner = ""
+    for child in node.children {
+        inner = inner + _tk_render(child)
+    }
+    var open = "<" + node.tag
+    if node.cls != "" { open = open + " class='" + node.cls + "'" }
+    if node.style != "" { open = open + " style='" + node.style + "'" }
+    open = open + _tk_render_attrs(node.attrs)
+    if _tk_void_tag(node.tag) { return open + " />" }
+    return open + ">" + inner + "</" + node.tag + ">"
+}
+
+func _tk_parse_cookies(header_str) {
+    var map = {}
+    if header_str == "" { return map }
+    var pairs = split(header_str, "; ")
+    for pair in pairs {
+        var idx = index_of(pair, "=")
+        if idx > -1 {
+            var k = trim(list_slice(pair, 0, idx))
+            var v = list_slice(pair, idx + 1, len(pair))
+            map[k] = v
+        }
+    }
+    return map
+}
+
+func _tk_css_base() {
+    return """<style>
+*,*::before,*::after{box-sizing:border-box}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--tk-bg);color:var(--tk-text);margin:0;line-height:1.6}
+a{color:inherit}
+button,input,select,textarea{font-family:inherit}
+#trucky-root{width:100%}
+.tk-container{width:100%;max-width:1200px;margin:0 auto;padding:0 2rem}
+.tk-container-sm{width:100%;max-width:800px;margin:0 auto;padding:0 2rem}
+.tk-card{background:var(--tk-bg);border:1px solid var(--tk-border);border-radius:var(--tk-radius);box-shadow:0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -1px rgba(0,0,0,0.06);overflow:hidden}
+.tk-card-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--tk-border);background:var(--tk-bg-alt);font-weight:600}
+.tk-card-body{padding:1.5rem}
+.tk-btn{display:inline-flex;align-items:center;justify-content:center;padding:0.625rem 1.25rem;font-size:0.875rem;font-weight:600;border-radius:var(--tk-radius);cursor:pointer;transition:all 0.2s;border:1px solid transparent;text-decoration:none}
+.tk-btn-primary{background:var(--tk-primary);color:var(--tk-bg);border-color:var(--tk-primary)}
+.tk-btn-secondary{background:var(--tk-secondary);color:var(--tk-bg);border-color:var(--tk-secondary)}
+.tk-btn-outline{background:transparent;color:var(--tk-primary);border-color:var(--tk-primary)}
+.tk-btn-ghost{background:transparent;color:var(--tk-text);border-color:transparent}
+.tk-btn-danger{background:var(--tk-error);color:var(--tk-bg);border-color:var(--tk-error)}
+.tk-badge{display:inline-flex;align-items:center;padding:0.25rem 0.625rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;border-radius:9999px}
+.tk-badge-primary{background:var(--tk-primary);color:var(--tk-bg)}
+.tk-badge-success{background:var(--tk-success);color:var(--tk-bg)}
+.tk-badge-warning{background:var(--tk-warning);color:var(--tk-bg)}
+.tk-alert{padding:1rem;border-radius:var(--tk-radius);border-left:4px solid transparent;margin-bottom:1rem}
+.tk-alert-success{border-left-color:var(--tk-success);background:var(--tk-bg-alt)}
+.tk-alert-error{border-left-color:var(--tk-error);background:var(--tk-bg-alt)}
+.tk-alert-warning{border-left-color:var(--tk-warning);background:var(--tk-bg-alt)}
+.tk-alert-info{border-left-color:var(--tk-info);background:var(--tk-bg-alt)}
+.tk-alert-title{display:block;margin-bottom:0.25rem;font-size:0.875rem}
+.tk-alert-msg{font-size:0.875rem}
+.tk-code{font-family:'JetBrains Mono',monospace;font-size:0.875em;background:var(--tk-bg-alt);color:var(--tk-secondary);padding:0.2em 0.4em;border-radius:4px;border:1px solid var(--tk-border)}
+.tk-blockquote{border-left:4px solid var(--tk-secondary);margin:1.5rem 0;padding:0.75rem 0 0.75rem 1.5rem;font-size:1.125rem;font-style:italic;color:var(--tk-text-muted);background:var(--tk-bg-alt);border-radius:0 var(--tk-radius) var(--tk-radius) 0}
+.tk-pre{font-family:'JetBrains Mono',monospace;font-size:0.875em;background:var(--tk-primary);color:var(--tk-bg);padding:1.5rem;border-radius:var(--tk-radius);overflow-x:auto;margin:1.5rem 0}
+.tk-link{color:var(--tk-secondary);text-decoration:none;font-weight:500}
+.tk-divider{border:none;border-top:1px solid var(--tk-border);margin:2rem 0}
+.tk-list{padding-left:1.25rem;margin:1rem 0}
+.tk-list li{margin:0.25rem 0}
+.tk-table{width:100%;border-collapse:collapse;font-size:0.875rem}
+.tk-table th,.tk-table td{text-align:left;padding:0.75rem;border-bottom:1px solid var(--tk-border)}
+.tk-label{display:block;font-size:0.875rem;font-weight:600;margin-bottom:0.5rem;color:var(--tk-text)}
+.tk-input{width:100%;padding:0.625rem 1rem;font-size:0.875rem;border:1px solid var(--tk-border);border-radius:var(--tk-radius);background:var(--tk-bg);color:var(--tk-text);outline:none;margin-bottom:1rem}
+.tk-checkbox{display:flex;align-items:center;font-size:0.875rem;cursor:pointer;margin-bottom:0.5rem}
+.tk-form{display:flex;flex-direction:column}
+.tk-field-error{color:var(--tk-error);font-size:0.8rem;margin:-0.75rem 0 1rem 0}
+.tk-tabs-nav{border-bottom:1px solid var(--tk-border);display:flex}
+.tk-tab-btn{padding:0.75rem 1.5rem;border:none;background:transparent;border-bottom:2px solid transparent;cursor:pointer;font-weight:600;color:var(--tk-text-muted)}
+.tk-tab-btn.active{color:var(--tk-secondary);border-bottom-color:var(--tk-secondary)}
+.tk-tab-pane{padding:1.5rem 0}
+.tk-modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,0.5);align-items:center;justify-content:center}
+.tk-modal-content{background-color:var(--tk-bg);padding:2rem;border-radius:var(--tk-radius);width:90%;max-width:500px;position:relative}
+.tk-modal-close{position:absolute;top:1rem;right:1.5rem;font-size:1.5rem;font-weight:bold;cursor:pointer}
+.tk-tooltip{position:relative;display:inline-block;cursor:help}
+.tk-tip{visibility:hidden;width:120px;background-color:#111827;color:#fff;text-align:center;border-radius:6px;padding:5px 0;position:absolute;z-index:1;bottom:125%;left:50%;margin-left:-60px;opacity:0;transition:opacity 0.3s;font-size:0.75rem;font-weight:500}
+.tk-toast{position:fixed;bottom:1rem;right:1rem;background:var(--tk-primary);color:var(--tk-bg);padding:0.75rem 1rem;border-radius:var(--tk-radius);box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);display:none;z-index:2000}
+</style>"""
+}
+
+func _tk_runtime_js() {
+    return """
+function _tk_gather_form(){var data={};var els=document.querySelectorAll('[name]');for(var i=0;i<els.length;i++){var el=els[i];var name=el.getAttribute('name');if(!name)continue;if(el.type==='checkbox'){data[name]=el.checked}else{data[name]=el.value}}return data}
+function _tk_dispatch(actionId){fetch(window.__truckyPath,{method:'POST',headers:{'Content-Type':'application/json','X-Trucky-Action':actionId},body:JSON.stringify(_tk_gather_form())}).then(function(r){return r.text()}).then(function(html){var root=document.getElementById('trucky-root');if(root){root.innerHTML=html}})}
+document.addEventListener('click',function(e){var t=e.target.closest('[data-trucky-action]');if(t){_tk_dispatch(t.getAttribute('data-trucky-action'));return}var mt=e.target.closest('[data-modal-target]');if(mt){var m=document.getElementById(mt.getAttribute('data-modal-target'));if(m){m.style.display='flex'}}var mc=e.target.closest('[data-modal-close]');if(mc){var box=mc.closest('.tk-modal');if(box){box.style.display='none'}}var tb=e.target.closest('[data-tab]');if(tb){var pane=tb.closest('.tk-tabs');var tabId=tb.getAttribute('data-tab');if(pane){var btns=pane.querySelectorAll('.tk-tab-btn');for(var i=0;i<btns.length;i++){btns[i].classList.remove('active')}var panes=pane.querySelectorAll('.tk-tab-pane');for(var j=0;j<panes.length;j++){panes[j].style.display='none'}tb.classList.add('active');var target=pane.querySelector('#'+tabId);if(target){target.style.display='block'}}}})
+document.addEventListener('submit',function(e){var f=e.target.closest('[data-trucky-submit]');if(f){e.preventDefault();_tk_dispatch(f.getAttribute('data-trucky-submit'))}})
+document.addEventListener('mouseover',function(e){var tt=e.target.closest('[data-tooltip]');if(tt){var box=tt.querySelector('.tk-tip');if(box){box.style.visibility='visible';box.style.opacity='1'}}})
+document.addEventListener('mouseout',function(e){var tt=e.target.closest('[data-tooltip]');if(tt){var box=tt.querySelector('.tk-tip');if(box){box.style.visibility='hidden';box.style.opacity='0'}}})
+window.showToast=function(id){var el=document.getElementById(id);if(el){el.style.display='block';setTimeout(function(){el.style.display='none'},3000)}}
+"""
+}
+
+class StateRef {
+    func init(app, key) {
+        self.app = app
+        self.key = key
+        self._state_marker = true
+    }
+    func get() {
+        return self.app._state_get(self.key)
+    }
+    func set(v) {
+        self.app._state_set(self.key, v)
+    }
+    func update(fn) {
+        self.app._state_set(self.key, fn(self.app._state_get(self.key)))
+    }
+}
+
 class Trucky {
     func init() {
         self.theme_p = "#0f172a"
@@ -13,115 +167,331 @@ class Trucky {
         self.warning = "#f59e0b"
         self.info = "#0ea5e9"
         self.radius = "8px"
-        self.shadow = "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)"
-    }
-
-    func _client_runtime() {
-        return "<script>!function(){'use strict';document.addEventListener('click',function(e){var t=e.target.closest('[data-modal-target]');if(t){var m=document.getElementById(t.getAttribute('data-modal-target'));if(m)m.style.display='flex'}var c=e.target.closest('[data-modal-close]');if(c){var mc=c.closest('.tk-modal');if(mc)mc.style.display='none'}var tb=e.target.closest('[data-tab]');if(tb){var p=tb.closest('.tk-tabs'),id=tb.getAttribute('data-tab');if(p){p.querySelectorAll('.tk-tab-btn').forEach(function(b){b.classList.remove('active')});p.querySelectorAll('.tk-tab-pane').forEach(function(c){c.style.display='none'});tb.classList.add('active');var target=p.querySelector('#'+id);if(target)target.style.display='block'}}});document.addEventListener('mouseover',function(e){var tt=e.target.closest('[data-tooltip]');if(tt){var box=tt.querySelector('.tk-tip');if(box){box.style.visibility='visible';box.style.opacity='1'}}});document.addEventListener('mouseout',function(e){var tt=e.target.closest('[data-tooltip]');if(tt){var box=tt.querySelector('.tk-tip');if(box){box.style.visibility='hidden';box.style.opacity='0'}}});window.showToast=function(id){var el=document.getElementById(id);if(el){el.style.display='block';setTimeout(function(){el.style.display='none'},3000)}}}();</script>"
-    }
-
-    func page(title, content) {
-        var safe_title = html_escape(title)
-        var html = "<!DOCTYPE html><html lang='en'><head><title>" + safe_title + "</title>"
-        html = html + "<meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-        html = html + "<link rel='preconnect' href='https://fonts.googleapis.com'><link rel='preconnect' href='https://fonts.gstatic.com' crossorigin><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>"
-        var prism = "<link href='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css' rel='stylesheet' /><script src='https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js'></script>"
-        html = html + prism
-        html = html + "<style>*,*::before,*::after{box-sizing:border-box} body { font-family: 'Plus Jakarta Sans', sans-serif; background: " + self.bg + "; color: " + self.text_m + "; margin: 0; line-height: 1.6; } a { text-decoration: none; color: inherit; } button, input, select, textarea { font-family: inherit; } .tk-tab-btn.active { color: " + self.theme_s + " !important; border-bottom: 2px solid " + self.theme_s + " !important; } .fade-in { animation: fadeIn 0.3s ease-in-out; } @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }</style>"
-        html = html + self._client_runtime()
-        html = html + "</head><body>" + content + "</body></html>"
-        return html
-    }
-
-    func attr(k, v) {
-        if v == "" { return "" }
-        return " " + k + "=\"" + html_escape(v) + "\""
-    }
-
-    func tag(n, c, s, a, content) {
-        return "<" + n + self.attr("class", c) + self.attr("style", s) + a + ">" + content + "</" + n + ">"
-    }
-
-    func tag_self(n, c, s, a) {
-        return "<" + n + self.attr("class", c) + self.attr("style", s) + a + " />"
-    }
-
-    func container(content) { return self.tag("div", "tk-container", "width:100%; max-width:1200px; margin:0 auto; padding:0 2rem;", "", content) }
-    func container_sm(content) { return self.tag("div", "tk-container-sm", "width:100%; max-width:800px; margin:0 auto; padding:0 2rem;", "", content) }
-
-    func stack(content, dir, gap, align) {
-        return self.tag("div", "tk-stack", "display:flex; flex-direction:" + dir + "; gap:" + gap + "; align-items:" + align + ";", "", content)
-    }
-    func vstack(content, gap) { return self.stack(content, "column", gap, "stretch") }
-    func hstack(content, gap) { return self.stack(content, "row", gap, "center") }
-
-    func grid(content, cols, gap) { return self.tag("div", "tk-grid", "display:grid; grid-template-columns:repeat(" + cols + ", 1fr); gap:" + gap + ";", "", content) }
-    func grid_auto(content, min_w, gap) { return self.tag("div", "tk-grid-auto", "display:grid; grid-template-columns:repeat(auto-fit, minmax(" + min_w + ", 1fr)); gap:" + gap + ";", "", content) }
-
-    func flex(content, dir, just, align, gap) { return self.tag("div", "", "display:flex; flex-direction:" + dir + "; justify-content:" + just + "; align-items:" + align + "; gap:" + gap + ";", "", content) }
-    func flex_row(content, gap) { return self.flex(content, "row", "flex-start", "center", gap) }
-    func flex_col(content, gap) { return self.flex(content, "column", "flex-start", "stretch", gap) }
-    func flex_between(content) { return self.flex(content, "row", "space-between", "center", "0") }
-    func flex_center(content) { return self.flex(content, "row", "center", "center", "0") }
-
-    func spacer(h) { return self.tag("div", "", "height:" + h + "; width:100%; flex-shrink:0;", "", "") }
-    func divider() { return self.tag_self("hr", "", "border:none; border-top:1px solid " + self.border + "; margin:2rem 0;", "") }
-
-    func h1(text) { return self.tag("h1", "", "font-size:3.25rem; font-weight:800; letter-spacing:-0.04em; margin:0 0 1.25rem 0; line-height:1.15;", "", html_escape(text)) }
-    func h2(text) { return self.tag("h2", "", "font-size:2.25rem; font-weight:700; letter-spacing:-0.02em; margin:1.75rem 0 1rem 0;", "", html_escape(text)) }
-    func h3(text) { return self.tag("h3", "", "font-size:1.5rem; font-weight:600; margin:1.25rem 0 0.75rem 0;", "", html_escape(text)) }
-    func h4(text) { return self.tag("h4", "", "font-size:1.25rem; font-weight:600; margin:1rem 0 0.5rem 0;", "", html_escape(text)) }
-
-    func p(text) { return self.tag("p", "", "font-size:1rem; color:" + self.text_m + "; margin:0 0 1rem 0;", "", html_escape(text)) }
-    func p_lead(text) { return self.tag("p", "", "font-size:1.25rem; color:" + self.text_muted + "; margin:0 0 1.5rem 0;", "", html_escape(text)) }
-    func p_muted(text) { return self.tag("p", "", "font-size:0.875rem; color:" + self.text_muted + "; margin:0 0 1rem 0;", "", html_escape(text)) }
-
-    func span(text) { return self.tag("span", "", "", "", html_escape(text)) }
-    func link(text, url) { return self.tag("a", "", "color:" + self.theme_s + "; text-decoration:none; font-weight:500;", self.attr("href", url), html_escape(text)) }
-
-    func blockquote(text) { return self.tag("blockquote", "", "border-left:4px solid " + self.theme_s + "; margin:1.5rem 0; padding:0.75rem 0 0.75rem 1.5rem; font-size:1.125rem; font-style:italic; color:" + self.text_muted + "; background:" + self.bg_alt + "; border-radius:0 " + self.radius + " " + self.radius + " 0;", "", html_escape(text)) }
-    func code(text) { return self.tag("code", "", "font-family:'JetBrains Mono', monospace; font-size:0.875em; background:" + self.bg_alt + "; color:" + self.theme_s + "; padding:0.2em 0.4em; border-radius:4px; border:1px solid " + self.border + ";", "", html_escape(text)) }
-    func pre(text) { return self.tag("pre", "", "font-family:'JetBrains Mono', monospace; font-size:0.875em; background:" + self.theme_p + "; color:" + self.bg + "; padding:1.5rem; border-radius:" + self.radius + "; overflow-x:auto; margin:1.5rem 0;", "", "<code class='language-pitruck'>" + html_escape(text) + "</code>") }
-
-    func _btn_base(text, bg, c, border, url, extra_attr) {
-        var s = "display:inline-flex; align-items:center; justify-content:center; padding:0.625rem 1.25rem; font-size:0.875rem; font-weight:600; border-radius:" + self.radius + "; cursor:pointer; transition:all 0.2s; border:" + border + "; background:" + bg + "; color:" + c + "; text-decoration:none;"
-        if url == "" {
-            return self.tag("button", "", s, extra_attr, html_escape(text))
-        } else {
-            return self.tag("a", "", s, self.attr("href", url) + extra_attr, html_escape(text))
+        self.title = "Trucky App"
+        self._actions = {}
+        self._action_counter = 0
+        self._state_counter = 0
+        self._state_cache = {}
+        self._errors = {}
+        self._notice = null
+        self._tree = null
+        self._serve_mode = true
+        self._is_action = false
+        self._action_id = ""
+        self._incoming_form = {}
+        self._path = "/"
+        self._sid = ""
+        self._sid_is_new = false
+        try {
+            self._path = request.path
+            self._sid = self._resolve_session()
+            if request.method == "POST" and contains(request.headers, "x-trucky-action") {
+                self._is_action = true
+                self._action_id = request.headers["x-trucky-action"]
+                try {
+                    self._incoming_form = json_decode(request.body)
+                } catch (perr) {
+                    self._incoming_form = {}
+                }
+            }
+        } catch (e) {
+            self._serve_mode = false
         }
     }
 
-    func btn_primary(text, url) { return self._btn_base(text, self.theme_p, self.bg, "1px solid " + self.theme_p, url, "") }
-    func btn_secondary(text, url) { return self._btn_base(text, self.theme_s, self.bg, "1px solid " + self.theme_s, url, "") }
-    func btn_outline(text, url) { return self._btn_base(text, "transparent", self.theme_p, "1px solid " + self.theme_p, url, "") }
-    func btn_ghost(text, url) { return self._btn_base(text, "transparent", self.text_m, "1px solid transparent", url, "") }
-    func btn_danger(text, url) { return self._btn_base(text, self.error, self.bg, "1px solid " + self.error, url, "") }
-
-    func card(content) { return self.tag("div", "tk-card", "background:" + self.bg + "; border:1px solid " + self.border + "; border-radius:" + self.radius + "; box-shadow:" + self.shadow + "; overflow:hidden;", "", content) }
-    func card_body(content) { return self.tag("div", "", "padding:1.5rem;", "", content) }
-    func card_header(content) { return self.tag("div", "", "padding:1.25rem 1.5rem; border-bottom:1px solid " + self.border + "; background:" + self.bg_alt + "; font-weight:600;", "", content) }
-    func card_simple(title, text, btn_t, btn_u) {
-        var c = self.h3(title) + self.p(text)
-        if btn_t != "" { c = c + self.spacer("1rem") + self.btn_primary(btn_t, btn_u) }
-        return self.card(self.card_body(c))
+    func _resolve_session() {
+        var cookie_header = request.headers["cookie"] ?? ""
+        var cookies = _tk_parse_cookies(cookie_header)
+        var sid = cookies["trucky_sid"] ?? ""
+        if sid == "" {
+            sid = to_string(timestamp()) + "_" + to_string(rand(100000, 999999))
+            self._sid_is_new = true
+        }
+        return sid
     }
 
-    func modal_simple(id, btn_text, title, content) {
-        var btn = self._btn_base(btn_text, self.theme_p, self.bg, "1px solid " + self.theme_p, "", self.attr("data-modal-target", id))
-        var m_style = "display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5); align-items:center; justify-content:center;"
-        var c_style = "background-color:" + self.bg + "; padding:2rem; border-radius:" + self.radius + "; width:90%; max-width:500px; position:relative;"
-        var close_btn = "<span data-modal-close='true' style='position:absolute; top:1rem; right:1.5rem; font-size:1.5rem; font-weight:bold; cursor:pointer;'>&times;</span>"
-        var m_content = self.tag("div", "", c_style, "", close_btn + self.h3(title) + self.tag("div", "", "margin-top:1rem;", "", content))
-        return btn + self.tag("div", "tk-modal", m_style, self.attr("id", id), m_content)
+    func _state_get(key) {
+        if contains(self._state_cache, key) {
+            return self._state_cache[key]
+        }
+        var full_key = self._sid + ":" + key
+        var val = null
+        if server_has(full_key) {
+            val = json_decode(server_get(full_key))
+        }
+        self._state_cache[key] = val
+        return val
     }
 
-    func tabs(headers_list, contents_list, id_prefix) {
+    func _state_set(key, val) {
+        self._state_cache[key] = val
+        var full_key = self._sid + ":" + key
+        server_set(full_key, json_encode(val))
+    }
+
+    func set_theme(overrides) {
+        for k in keys(overrides) {
+            if k == "primary" { self.theme_p = overrides[k] }
+            elif k == "secondary" { self.theme_s = overrides[k] }
+            elif k == "accent" { self.theme_a = overrides[k] }
+            elif k == "background" { self.bg = overrides[k] }
+            elif k == "background_alt" { self.bg_alt = overrides[k] }
+            elif k == "text" { self.text_m = overrides[k] }
+            elif k == "text_muted" { self.text_muted = overrides[k] }
+            elif k == "border" { self.border = overrides[k] }
+            elif k == "success" { self.success = overrides[k] }
+            elif k == "error" { self.error = overrides[k] }
+            elif k == "warning" { self.warning = overrides[k] }
+            elif k == "info" { self.info = overrides[k] }
+            elif k == "radius" { self.radius = overrides[k] }
+            elif k == "title" { self.title = overrides[k] }
+        }
+    }
+
+    func state(default_val) {
+        var key = "s" + to_string(self._state_counter)
+        self._state_counter = self._state_counter + 1
+        if self._serve_mode {
+            var full_key = self._sid + ":" + key
+            if not server_has(full_key) {
+                self._state_set(key, default_val)
+            }
+            return StateRef(self, key)
+        }
+        self._state_cache[key] = default_val
+        return StateRef(self, key)
+    }
+
+    func action(fn) {
+        var aid = "act" + to_string(self._action_counter)
+        self._action_counter = self._action_counter + 1
+        self._actions[aid] = fn
+        return aid
+    }
+
+    func form_value(name) {
+        return self._incoming_form[name] ?? ""
+    }
+
+    func set_errors(errors) {
+        self._errors = errors
+    }
+
+    func error_for(name) {
+        return self._errors[name] ?? ""
+    }
+
+    func notify(text, kind) {
+        self._notice = { "text": text, "kind": kind }
+    }
+
+    func validate(schema, values) {
+        var errors = {}
+        for field in keys(schema) {
+            var rules = schema[field]
+            var val = values[field] ?? ""
+            var msg = ""
+            if rules.required and trim(to_string(val)) == "" {
+                msg = "This field is required"
+            } elif rules.type == "number" and trim(to_string(val)) != "" and not is_number(val) {
+                msg = "Must be a number"
+            } elif rules.min != null and is_number(val) and to_number(val) < rules.min {
+                msg = "Must be at least " + to_string(rules.min)
+            } elif rules.max != null and is_number(val) and to_number(val) > rules.max {
+                msg = "Must be at most " + to_string(rules.max)
+            } elif rules.minlen != null and len(to_string(val)) < rules.minlen {
+                msg = "Must be at least " + to_string(rules.minlen) + " characters"
+            } elif rules.maxlen != null and len(to_string(val)) > rules.maxlen {
+                msg = "Must be at most " + to_string(rules.maxlen) + " characters"
+            }
+            if msg != "" {
+                errors[field] = msg
+            }
+        }
+        return errors
+    }
+
+    func mount(tree) {
+        self._tree = tree
+    }
+
+    func run() {
+        if not self._serve_mode {
+            print _tk_render(self._tree)
+            return null
+        }
+        if self._sid_is_new {
+            response.headers["Set-Cookie"] = "trucky_sid=" + self._sid + "; Path=/"
+        }
+        if self._is_action {
+            var fn = self._actions[self._action_id]
+            if fn != null {
+                fn()
+            }
+            response.headers["Content-Type"] = "text/html; charset=utf-8"
+            response.body = _tk_render(self._tree)
+        } else {
+            response.headers["Content-Type"] = "text/html; charset=utf-8"
+            response.body = self._render_page()
+        }
+        return null
+    }
+
+    func _render_page() {
+        var body_html = "<div id='trucky-root'>" + _tk_render(self._tree) + "</div>"
+        var path_json = json_encode(self._path)
+        var path_script = "<script>window.__truckyPath = " + path_json + ";</script>"
+        var head = "<meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+        head = head + "<link rel='preconnect' href='https://fonts.googleapis.com'><link rel='preconnect' href='https://fonts.gstatic.com' crossorigin><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap' rel='stylesheet'>"
+        head = head + "<title>" + html_escape(self.title) + "</title>"
+        head = head + self._css_vars()
+        head = head + _tk_css_base()
+        var html = "<!DOCTYPE html><html lang='en'><head>" + head + "</head><body>" + body_html + path_script + "<script>" + _tk_runtime_js() + "</script></body></html>"
+        return html
+    }
+
+    func _css_vars() {
+        return `<style>:root{--tk-primary:${self.theme_p};--tk-secondary:${self.theme_s};--tk-accent:${self.theme_a};--tk-bg:${self.bg};--tk-bg-alt:${self.bg_alt};--tk-text:${self.text_m};--tk-text-muted:${self.text_muted};--tk-border:${self.border};--tk-success:${self.success};--tk-error:${self.error};--tk-warning:${self.warning};--tk-info:${self.info};--tk-radius:${self.radius};}</style>`
+    }
+}
+
+class UI {
+    func text(value) {
+        if _tk_is_state(value) {
+            return { "kind": "state", "ref": value }
+        }
+        return { "kind": "text", "value": to_string(value) }
+    }
+
+    func raw(html_str) {
+        return { "kind": "raw", "value": html_str }
+    }
+
+    func h1(value) { return _tk_el("h1", "", "font-size:2.5rem;font-weight:800;letter-spacing:-0.03em;margin:0 0 1rem 0;line-height:1.2;", {}, [self.text(value)]) }
+    func h2(value) { return _tk_el("h2", "", "font-size:1.875rem;font-weight:700;letter-spacing:-0.02em;margin:1.5rem 0 0.75rem 0;", {}, [self.text(value)]) }
+    func h3(value) { return _tk_el("h3", "", "font-size:1.375rem;font-weight:600;margin:1rem 0 0.5rem 0;", {}, [self.text(value)]) }
+    func h4(value) { return _tk_el("h4", "", "font-size:1.125rem;font-weight:600;margin:0.75rem 0 0.5rem 0;", {}, [self.text(value)]) }
+
+    func p(value) { return _tk_el("p", "", "font-size:1rem;color:var(--tk-text);margin:0 0 1rem 0;", {}, [self.text(value)]) }
+    func p_lead(value) { return _tk_el("p", "", "font-size:1.2rem;color:var(--tk-text-muted);margin:0 0 1.5rem 0;", {}, [self.text(value)]) }
+    func p_muted(value) { return _tk_el("p", "", "font-size:0.875rem;color:var(--tk-text-muted);margin:0 0 1rem 0;", {}, [self.text(value)]) }
+    func span(value) { return _tk_el("span", "", "", {}, [self.text(value)]) }
+    func code(value) { return _tk_el("code", "tk-code", "", {}, [self.text(value)]) }
+    func blockquote(value) { return _tk_el("blockquote", "tk-blockquote", "", {}, [self.text(value)]) }
+    func pre_code(value) { return _tk_el("pre", "tk-pre", "", {}, [_tk_el("code", "language-pitruck", "", {}, [self.text(value)])]) }
+
+    func link(value, href) { return _tk_el("a", "tk-link", "", { "href": href }, [self.text(value)]) }
+
+    func divider() { return _tk_el("hr", "tk-divider", "", {}, []) }
+    func spacer(h) { return _tk_el("div", "", "height:" + h + ";width:100%;flex-shrink:0;", {}, []) }
+
+    func container(children) { return _tk_el("div", "tk-container", "", {}, children) }
+    func container_sm(children) { return _tk_el("div", "tk-container-sm", "", {}, children) }
+    func card(children) { return _tk_el("div", "tk-card", "", {}, children) }
+    func card_header(children) { return _tk_el("div", "tk-card-header", "", {}, children) }
+    func card_body(children) { return _tk_el("div", "tk-card-body", "", {}, children) }
+
+    func vstack(children, gap) { return _tk_el("div", "", "display:flex;flex-direction:column;gap:" + gap + ";", {}, children) }
+    func hstack(children, gap) { return _tk_el("div", "", "display:flex;flex-direction:row;align-items:center;gap:" + gap + ";", {}, children) }
+    func grid(children, cols, gap) { return _tk_el("div", "", "display:grid;grid-template-columns:repeat(" + cols + ",1fr);gap:" + gap + ";", {}, children) }
+    func grid_auto(children, min_w, gap) { return _tk_el("div", "", "display:grid;grid-template-columns:repeat(auto-fit,minmax(" + min_w + ",1fr));gap:" + gap + ";", {}, children) }
+    func flex_between(children) { return _tk_el("div", "", "display:flex;flex-direction:row;justify-content:space-between;align-items:center;", {}, children) }
+    func flex_center(children) { return _tk_el("div", "", "display:flex;justify-content:center;align-items:center;", {}, children) }
+
+    func button(app, label, onclick, variant) {
+        var aid = app.action(onclick)
+        return _tk_el("button", "tk-btn tk-btn-" + variant, "", { "type": "button", "data-trucky-action": aid }, [self.text(label)])
+    }
+
+    func badge(value, variant) { return _tk_el("span", "tk-badge tk-badge-" + variant, "", {}, [self.text(value)]) }
+
+    func alert(title, message, variant) {
+        var c = _tk_el("strong", "tk-alert-title", "", {}, [self.text(title)])
+        var m = _tk_el("div", "tk-alert-msg", "", {}, [self.text(message)])
+        return _tk_el("div", "tk-alert tk-alert-" + variant, "", {}, [c, m])
+    }
+
+    func notice_slot(app) { return { "kind": "notice_slot", "app": app } }
+
+    func image(src, alt) { return _tk_el("img", "tk-image", "", { "src": src, "alt": alt }, []) }
+
+    func list(items) {
+        var lis = []
+        for item in items {
+            push(lis, _tk_el("li", "", "", {}, [self.text(item)]))
+        }
+        return _tk_el("ul", "tk-list", "", {}, lis)
+    }
+
+    func table(headers, rows) {
+        var head_cells = []
+        for h in headers {
+            push(head_cells, _tk_el("th", "", "", {}, [self.text(h)]))
+        }
+        var head_row = _tk_el("tr", "", "", {}, head_cells)
+        var body_rows = []
+        for row in rows {
+            var cells = []
+            for cell in row {
+                push(cells, _tk_el("td", "", "", {}, [self.text(cell)]))
+            }
+            push(body_rows, _tk_el("tr", "", "", {}, cells))
+        }
+        var thead = _tk_el("thead", "", "", {}, [head_row])
+        var tbody = _tk_el("tbody", "", "", {}, body_rows)
+        return _tk_el("table", "tk-table", "", {}, [thead, tbody])
+    }
+
+    func label(value, for_id) { return _tk_el("label", "tk-label", "", { "for": for_id }, [self.text(value)]) }
+
+    func input_text(name, placeholder, value) { return self._input("text", name, placeholder, value) }
+    func input_email(name, placeholder, value) { return self._input("email", name, placeholder, value) }
+    func input_password(name, placeholder, value) { return self._input("password", name, placeholder, value) }
+    func input_number(name, placeholder, value) { return self._input("number", name, placeholder, value) }
+
+    func _input(kind, name, placeholder, value) {
+        var attrs = { "type": kind, "name": name, "placeholder": placeholder }
+        if value != null and value != "" {
+            attrs["value"] = value
+        }
+        return _tk_el("input", "tk-input", "", attrs, [])
+    }
+
+    func textarea(name, placeholder, value) {
+        var v = value
+        if v == null { v = "" }
+        return _tk_el("textarea", "tk-input", "", { "name": name, "placeholder": placeholder }, [self.text(v)])
+    }
+
+    func checkbox(name, value_label) {
+        var box = _tk_el("input", "", "margin-right:0.5rem;", { "type": "checkbox", "name": name }, [])
+        return _tk_el("label", "tk-checkbox", "", {}, [box, self.text(value_label)])
+    }
+
+    func select(name, options) {
+        var opts = []
+        for opt in options {
+            push(opts, _tk_el("option", "", "", { "value": opt }, [self.text(opt)]))
+        }
+        return _tk_el("select", "tk-input", "", { "name": name }, opts)
+    }
+
+    func error_for(app, field) { return { "kind": "error_slot", "app": app, "field": field } }
+
+    func form(app, children, on_submit) {
+        var aid = app.action(on_submit)
+        return _tk_el("form", "tk-form", "", { "data-trucky-submit": aid }, children)
+    }
+
+    func submit(label) {
+        return _tk_el("button", "tk-btn tk-btn-primary", "", { "type": "submit" }, [self.text(label)])
+    }
+
+    func tabs(headers, contents, id_prefix) {
         var h_html = ""
         var c_html = ""
         var i = 0
-        var total = len(headers_list)
-
+        var total = len(headers)
         while i < total {
             var tab_id = id_prefix + "-c-" + to_string(i)
             var active_class = ""
@@ -130,63 +500,28 @@ class Trucky {
                 active_class = " active"
                 display_style = "display:block;"
             }
-
-            var btn_s = "padding:0.75rem 1.5rem; border:none; background:transparent; border-bottom:2px solid transparent; cursor:pointer; font-weight:600; color:" + self.text_muted + ";"
-            h_html = h_html + self.tag("button", "tk-tab-btn" + active_class, btn_s, self.attr("data-tab", tab_id), html_escape(headers_list[i]))
-            c_html = c_html + self.tag("div", "tk-tab-pane", "padding:1.5rem 0; " + display_style, self.attr("id", tab_id), contents_list[i])
+            h_html = h_html + "<button class='tk-tab-btn" + active_class + "' data-tab='" + tab_id + "'>" + html_escape(headers[i]) + "</button>"
+            c_html = c_html + "<div class='tk-tab-pane' id='" + tab_id + "' style='" + display_style + "'>" + _tk_render(contents[i]) + "</div>"
             i = i + 1
         }
+        var nav = "<div class='tk-tabs-nav'>" + h_html + "</div>"
+        return self.raw("<div class='tk-tabs'>" + nav + "<div>" + c_html + "</div></div>")
+    }
 
-        var nav = self.tag("div", "", "border-bottom:1px solid " + self.border + "; display:flex;", "", h_html)
-        return self.tag("div", "tk-tabs", "", "", nav + self.tag("div", "", "", "", c_html))
+    func modal(id, btn_text, title, content) {
+        var btn = "<button class='tk-btn tk-btn-primary' data-modal-target='" + id + "'>" + html_escape(btn_text) + "</button>"
+        var close_btn = "<span class='tk-modal-close' data-modal-close='true'>&times;</span>"
+        var inner = close_btn + "<h3>" + html_escape(title) + "</h3><div style='margin-top:1rem;'>" + _tk_render(content) + "</div>"
+        var modal_html = "<div class='tk-modal' id='" + id + "'><div class='tk-modal-content'>" + inner + "</div></div>"
+        return self.raw(btn + modal_html)
     }
 
     func tooltip(content, tip_text) {
-        var s = "position:relative; display:inline-block; cursor:help;"
-        var tip = "<span class='tk-tip' style='visibility:hidden; width:120px; background-color:#111827; color:#fff; text-align:center; border-radius:6px; padding:5px 0; position:absolute; z-index:1; bottom:125%; left:50%; margin-left:-60px; opacity:0; transition:opacity 0.3s; font-size:0.75rem; font-weight:500;'>" + html_escape(tip_text) + "</span>"
-        return self.tag("div", "", s, self.attr("data-tooltip", "true"), tip + content)
+        var tip = "<span class='tk-tip'>" + html_escape(tip_text) + "</span>"
+        return self.raw("<div class='tk-tooltip' data-tooltip='true'>" + tip + _tk_render(content) + "</div>")
     }
 
     func toast(id, text) {
-        var s = "position:fixed; bottom:1rem; right:1rem; background:" + self.theme_p + "; color:white; padding:0.75rem 1rem; border-radius:" + self.radius + "; box-shadow:" + self.shadow + "; display:none; z-index:2000;"
-        return self.tag("div", "tk-toast", s, self.attr("id", id), html_escape(text))
+        return self.raw("<div class='tk-toast' id='" + id + "'>" + html_escape(text) + "</div>")
     }
-
-    # Badges & Alerts
-    func badge_primary(text) { return self.tag("span", "", "display:inline-flex; align-items:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.theme_p + "; color:" + self.bg + ";", "", html_escape(text)) }
-    func badge_success(text) { return self.tag("span", "", "display:inline-flex; align-items:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.success + "20; color:" + self.success + ";", "", html_escape(text)) }
-    func badge_warning(text) { return self.tag("span", "", "display:inline-flex; align-items:center; padding:0.25rem 0.625rem; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; border-radius:9999px; background:" + self.warning + "20; color:" + self.warning + ";", "", html_escape(text)) }
-
-    func alert_success(title, text) {
-        var c = self.tag("strong", "", "display:block; margin-bottom:0.25rem; font-size:0.875rem;", "", html_escape(title)) + self.tag("span", "", "font-size:0.875rem;", "", html_escape(text))
-        return self.tag("div", "", "padding:1rem; border-radius:" + self.radius + "; border-left:4px solid " + self.success + "; background:" + self.success + "10; color:" + self.text_m + "; margin-bottom:1rem;", "", c)
-    }
-    func alert_error(title, text) {
-        var c = self.tag("strong", "", "display:block; margin-bottom:0.25rem; font-size:0.875rem;", "", html_escape(title)) + self.tag("span", "", "font-size:0.875rem;", "", html_escape(text))
-        return self.tag("div", "", "padding:1rem; border-radius:" + self.radius + "; border-left:4px solid " + self.error + "; background:" + self.error + "10; color:" + self.text_m + "; margin-bottom:1rem;", "", c)
-    }
-
-    # Forms & Inputs
-    func label(text, id) { return self.tag("label", "", "display:block; font-size:0.875rem; font-weight:600; margin-bottom:0.5rem; color:" + self.text_m + ";", self.attr("for", id), html_escape(text)) }
-    func _input_base(type, id, placeholder, val) { return self.tag_self("input", "", "width:100%; padding:0.625rem 1rem; font-size:0.875rem; border:1px solid " + self.border + "; border-radius:" + self.radius + "; background:" + self.bg + "; color:" + self.text_m + "; outline:none;", self.attr("type", type) + self.attr("id", id) + self.attr("placeholder", placeholder) + self.attr("value", val)) }
-
-    func input_text(id, placeholder) { return self._input_base("text", id, placeholder, "") }
-    func input_email(id, placeholder) { return self._input_base("email", id, placeholder, "") }
-    func input_password(id, placeholder) { return self._input_base("password", id, placeholder, "") }
-
-    func checkbox(id, label_text) {
-        var inp = self.tag_self("input", "", "margin-right:0.5rem; width:1rem; height:1rem; cursor:pointer;", self.attr("type", "checkbox") + self.attr("id", id))
-        return self.tag("label", "", "display:flex; align-items:center; font-size:0.875rem; cursor:pointer; margin-bottom:0.5rem;", "", inp + html_escape(label_text))
-    }
-
-    func form_group(label_text, input_html) { return self.tag("div", "", "margin-bottom:1.5rem;", "", self.label(label_text, "") + input_html) }
-    func form(action, method, content) { return self.tag("form", "", "", self.attr("action", action) + self.attr("method", method), content) }
-
-    # Tables & Lists
-    func table(headers_html, rows_html) { return self.tag("table", "", "width:100%; border-collapse:collapse; font-size:0.875rem;", "", self.tag("thead", "", "", "", headers_html) + self.tag("tbody", "", "", "", rows_html)) }
-    func th(text) { return self.tag("th", "", "text-align:left; padding:0.75rem; border-bottom:1px solid " + self.border + ";", "", html_escape(text)) }
-    func td(text) { return self.tag("td", "", "padding:0.75rem; border-bottom:1px solid " + self.border + ";", "", html_escape(text)) }
-
-    func ul(items_html) { return self.tag("ul", "", "padding-left:1.25rem; margin:1rem 0;", "", items_html) }
-    func li(text) { return self.tag("li", "", "margin:0.25rem 0;", "", html_escape(text)) }
 }
