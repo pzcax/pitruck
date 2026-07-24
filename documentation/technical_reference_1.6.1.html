@@ -283,7 +283,7 @@
     <section id="intro">
         <h1>Pitruck 1.6.1 Technical Reference</h1>
         <p>Pitruck is a dynamically-typed, interpreted scripting language implemented in Rust. It features a lightweight, C-style syntax with modern conveniences like optional chaining, null-coalescing, pattern matching, template strings, and first-class functions.</p>
-        <p>A major feature of Pitruck is its built-in HTTP server capabilities, allowing scripts to be instantly served as web endpoints with zero external dependencies. Version 1.6.0introduces native HTTPS support for both outbound requests and inbound server mode, a persistent server store for cross-request state, permission controls for serve mode, and a program cache for faster repeated request handling.</p>
+        <p>A major feature of Pitruck is its built-in HTTP server capabilities, allowing scripts to be instantly served as web endpoints with zero external dependencies. Version 1.6.0 introduces native HTTPS support for both outbound requests and inbound server mode, a persistent server store for cross-request state, permission controls for serve mode, and a program cache for faster repeated request handling.</p>
     </section>
 
     <section id="getting-started">
@@ -582,7 +582,7 @@ print bold(underline("hi"))</code></pre>
         </ol>
 
         <h3>HTTPS Support</h3>
-        <p>Version 1.6.0adds native TLS support for the inbound server, powered by <code>rustls</code> and the <code>ring</code> crypto backend:</p>
+        <p>Version 1.6.0 adds native TLS support for the inbound server, powered by <code>rustls</code> and the <code>ring</code> crypto backend:</p>
         <ul>
             <li><strong>Auto dev cert:</strong> <code>pitruck --serve script.pr --https</code> generates a self-signed certificate cached in <code>.pitruck-tls/</code>. Zero config for local development.</li>
             <li><strong>Custom cert:</strong> <code>pitruck --serve script.pr --https --tls-cert cert.pem --tls-key key.pem</code> uses your own PEM files for production.</li>
@@ -1088,7 +1088,7 @@ app.run()</code></pre>
     <section id="changelog">
         <h2>Changelog</h2>
 
-        <h3>1.6.0-> 1.6.1 (library & permissions fix-up release)</h3>
+        <h3>1.6.0 -> 1.6.1 (library & permissions fix-up release)</h3>
 
         <div class="changelog-item">
             <span class="changelog-tag tag-fixed">Fixed</span>
