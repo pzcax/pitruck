@@ -191,9 +191,8 @@
             text-align: center;
         }
 
-        /* Sleek minimal scrollbar */
         * {
-            scrollbar-width: thin;
+            scrollbar-width: none;
             scrollbar-color: #334155 transparent;
         }
         *::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -208,9 +207,8 @@
         }
         *::-webkit-scrollbar-corner { background: transparent; }
 
-        /* Sidebar scrollbar: ultra-minimal */
         nav {
-            scrollbar-width: thin;
+            scrollbar-width: none;
             scrollbar-color: #334155 transparent;
         }
         nav::-webkit-scrollbar { width: 2px; height: 2px; }
@@ -285,7 +283,7 @@
     <section id="intro">
         <h1>Pitruck 1.6.1 Technical Reference</h1>
         <p>Pitruck is a dynamically-typed, interpreted scripting language implemented in Rust. It features a lightweight, C-style syntax with modern conveniences like optional chaining, null-coalescing, pattern matching, template strings, and first-class functions.</p>
-        <p>A major feature of Pitruck is its built-in HTTP server capabilities, allowing scripts to be instantly served as web endpoints with zero external dependencies. Version 1.6 introduces native HTTPS support for both outbound requests and inbound server mode, a persistent server store for cross-request state, permission controls for serve mode, and a program cache for faster repeated request handling.</p>
+        <p>A major feature of Pitruck is its built-in HTTP server capabilities, allowing scripts to be instantly served as web endpoints with zero external dependencies. Version 1.6.0introduces native HTTPS support for both outbound requests and inbound server mode, a persistent server store for cross-request state, permission controls for serve mode, and a program cache for faster repeated request handling.</p>
     </section>
 
     <section id="getting-started">
@@ -297,18 +295,18 @@
 
         <h3>CLI Usage</h3>
         <p>The Pitruck executable provides a REPL, script runner, package manager, and a web server:</p>
-        <pre><code>pitruck                             # Start the interactive REPL
-pitruck script.pr                   # Run a source file (read/write/net allowed by default)
-pitruck script.pr --speed           # Run and show execution timing (lex, parse, run)
-pitruck script.pr --deny-write      # Run with file writes disabled
-pitruck script.pr --deny-all        # Run with read/write/net all disabled
-pitruck --serve script.pr           # Serve script.pr as an HTTP handler (port 8000)
-pitruck --serve public/ --port 8080 # Serve a directory using file-based routing
-pitruck --serve script.pr --https   # Serve with auto-generated self-signed HTTPS
-pitruck --serve script.pr --https --tls-cert cert.pem --tls-key key.pem  # Serve with custom HTTPS cert
-pitruck lib install &lt;url|path&gt;      # Download or copy a library into lib/
-pitruck lib list                    # List installed libraries
-pitruck lib delete &lt;name&gt;           # Remove an installed library</code></pre>
+        <pre><code>pitruck                             // Start the interactive REPL
+pitruck script.pr                   // Run a source file (read/write/net allowed by default)
+pitruck script.pr --speed           // Run and show execution timing (lex, parse, run)
+pitruck script.pr --deny-write      // Run with file writes disabled
+pitruck script.pr --deny-all        // Run with read/write/net all disabled
+pitruck --serve script.pr           // Serve script.pr as an HTTP handler (port 8000)
+pitruck --serve public/ --port 8080 // Serve a directory using file-based routing
+pitruck --serve script.pr --https   // Serve with auto-generated self-signed HTTPS
+pitruck --serve script.pr --https --tls-cert cert.pem --tls-key key.pem  // Serve with custom HTTPS cert
+pitruck lib install &lt;url|path&gt;      // Download or copy a library into lib/
+pitruck lib list                    // List installed libraries
+pitruck lib delete &lt;name&gt;           // Remove an installed library</code></pre>
 
         <h3>Script-Mode Flags (running <code>pitruck file.pr</code>)</h3>
         <p>When running a script directly (NOT in <code>--serve</code> mode), file I/O and outbound networking are <strong>allowed by default</strong>. The user is explicitly running a local script, so the serve-mode default-deny posture does not apply. You can opt out with the <code>--deny-*</code> flags:</p>
@@ -345,14 +343,14 @@ pitruck lib delete &lt;name&gt;           # Remove an installed library</code></
 
         <h3>Quickstart: How To Use Libraries</h3>
         <p>Pitruck ships with seven bundled libraries in the <code>lib/</code> directory: <code>color</code>, <code>math</code>, <code>struct</code>, <code>system</code>, <code>time</code>, <code>std</code> (a meta-module that brings all of the previous five plus <code>uuid_v4</code>), and <code>trucky</code> (a web framework). Load any of them with the <code>bring</code> keyword:</p>
-        <pre><code>bring std              # brings color + math + struct + system + time + uuid_v4
-bring system           # brings just the system helpers
-bring trucky           # brings the web framework classes (Trucky, UI, StateRef)
+        <pre><code>bring std              // brings color + math + struct + system + time + uuid_v4
+bring system           // brings just the system helpers
+bring trucky           // brings the web framework classes (Trucky, UI, StateRef)
 
-print os()             # "linux" / "windows" / "macos"
+print os()             // "linux" / "windows" / "macos"
 var p = struct({ "name": "", "age": 0 })
-p.name = "Alice"       # works! dicts support dot-assignment since 1.6.1
-print p.name           # Alice</code></pre>
+p.name = "Alice"       // works! dicts support dot-assignment since 1.6.1
+print p.name           // Alice</code></pre>
         <p>After <code>bring &lt;module&gt;</code>, every top-level <code>func</code> and <code>class</code> defined in that module becomes a global name in your script. There is no <code>module.function()</code> namespace - just call the function directly. The full reference for each library is in the <a href="#libraries">Bundled Libraries</a> section below.</p>
     </section>
 
@@ -361,7 +359,7 @@ print p.name           # Alice</code></pre>
 
         <h3>Comments</h3>
         <p>Pitruck supports three comment styles:</p>
-        <pre><code># Python-style single-line comment
+        <pre><code>// Python-style single-line comment
 // C-style single-line comment
 /* Multi-line 
    block comment 
@@ -412,8 +410,8 @@ var template = `Hello ${name}!`</code></pre>
         <h3>String Indexing</h3>
         <p>Strings support numeric indexing to retrieve individual characters, similar to list indexing. Indexing out of bounds throws a runtime error.</p>
         <pre><code>var word = "hello"
-print word[0]   # "h"
-print word[4]   # "o"</code></pre>
+print word[0]   // "h"
+print word[4]   // "o"</code></pre>
     </section>
 
     <section id="variables">
@@ -421,13 +419,13 @@ print word[4]   # "o"</code></pre>
         <p>Variables are declared using the <code>var</code> keyword. They are block-scoped.</p>
         <pre><code>var a = 10
 {
-    var a = 20 # Shadows outer 'a'
-    print a    # 20
+    var a = 20 // Shadows outer 'a'
+    print a    // 20
 }
-print a        # 10</code></pre>
+print a        // 10</code></pre>
         <p>Attempting to access or assign to an undeclared variable throws a <code>RuntimeError</code>. Redeclaring a variable with the same name in the same scope also throws a <code>RuntimeError</code>:</p>
         <pre><code>var x = 5
-var x = 10 # RuntimeError: 'x' is already declared in this scope</code></pre>
+var x = 10 // RuntimeError: 'x' is already declared in this scope</code></pre>
     </section>
 
     <section id="operators">
@@ -584,7 +582,7 @@ print bold(underline("hi"))</code></pre>
         </ol>
 
         <h3>HTTPS Support</h3>
-        <p>Version 1.6 adds native TLS support for the inbound server, powered by <code>rustls</code> and the <code>ring</code> crypto backend:</p>
+        <p>Version 1.6.0adds native TLS support for the inbound server, powered by <code>rustls</code> and the <code>ring</code> crypto backend:</p>
         <ul>
             <li><strong>Auto dev cert:</strong> <code>pitruck --serve script.pr --https</code> generates a self-signed certificate cached in <code>.pitruck-tls/</code>. Zero config for local development.</li>
             <li><strong>Custom cert:</strong> <code>pitruck --serve script.pr --https --tls-cert cert.pem --tls-key key.pem</code> uses your own PEM files for production.</li>
@@ -629,7 +627,7 @@ print bold(underline("hi"))</code></pre>
             <tr><td><code>server_delete(key)</code></td><td>Delete a key; returns <code>true</code> if the key existed. Only available in serve mode.</td></tr>
             <tr><td><code>server_keys()</code></td><td>Returns a list of all store keys. Only available in serve mode.</td></tr>
         </table>
-        <pre><code># Simple visit counter
+        <pre><code>// Simple visit counter
 var count = server_get("visits")
 if count == null { count = "0" }
 var n = to_number(count) + 1
@@ -644,7 +642,7 @@ response.body = "Visits: " + to_string(n)</code></pre>
         <p>In serve mode, Pitruck caches the compiled AST of each script by its file modification time. If the file hasn't changed since the last request, the cached program is reused, skipping the lex and parse phases entirely. This significantly improves response latency for repeated requests.</p>
 
         <h3>Server Example</h3>
-        <pre><code># file: server.pr
+        <pre><code>// file: server.pr
 if request.path == "/api" {
     response.headers["Content-Type"] = "application/json"
     var data = { "status": "success", "method": request.method }
@@ -740,14 +738,14 @@ if request.path == "/api" {
         <div class="note">
             <strong>Read this first:</strong> The following call styles are <strong>WRONG</strong> and will fail with "cannot find variable" or "static method not found":
             <pre><code>bring system
-print system.os()         # WRONG - `system` is not a variable
+print system.os()         // WRONG - `system` is not a variable
 bring color
-print color.red("hi")     # WRONG - `color` is not a variable</code></pre>
+print color.red("hi")     // WRONG - `color` is not a variable</code></pre>
             The correct style is to call the bare function name:
             <pre><code>bring system
-print os()                # OK
+print os()                // OK
 bring color
-print red("hi")           # OK</code></pre>
+print red("hi")           // OK</code></pre>
             (The only exception is when a library defines a class with the same name as the file - e.g. <code>trucky.pr</code> defines <code>class Trucky</code> - in which case you instantiate it with <code>var app = Trucky()</code> and call methods like <code>app.run()</code>.)
         </div>
 
@@ -765,33 +763,33 @@ print red("hi")           # OK</code></pre>
         <h3><code>bring color</code> - Terminal Colors</h3>
         <p>ANSI escape-code wrappers for coloring and styling terminal output. Each function takes a string and returns it wrapped in the appropriate escape sequence, with a reset (<code>\x1b[0m</code>) suffix so styles do not bleed into neighboring output.</p>
         <pre><code>bring color
-print red("Error!")              # red foreground
-print green("Success!")          # green foreground
-print bold(underline("Important")) # bold + underlined
-print bg_blue("Highlighted")     # blue background</code></pre>
+print red("Error!")              // red foreground
+print green("Success!")          // green foreground
+print bold(underline("Important")) // bold + underlined
+print bg_blue("Highlighted")     // blue background</code></pre>
         <p>Available functions: <code>red</code>, <code>green</code>, <code>blue</code>, <code>yellow</code>, <code>cyan</code>, <code>magenta</code>, <code>white</code>, <code>black</code>, <code>bg_red</code>, <code>bg_green</code>, <code>bg_blue</code>, <code>bold</code>, <code>underline</code>.</p>
 
         <h3><code>bring math</code> - Math Utilities</h3>
         <p>Convenience wrappers around the built-in <code>math_*</code> functions, plus <code>max</code>/<code>min</code> and <code>inc</code>.</p>
         <pre><code>bring math
-print abs(-5)        # 5
-print sqrt(16)       # 4
-print pow(2, 3)      # 8
-print max(10, 20)    # 20
-print min(10, 20)    # 10
-print inc(7)         # 8</code></pre>
+print abs(-5)        // 5
+print sqrt(16)       // 4
+print pow(2, 3)      // 8
+print max(10, 20)    // 20
+print min(10, 20)    // 10
+print inc(7)         // 8</code></pre>
         <p>Available functions: <code>inc</code>, <code>abs</code>, <code>sqrt</code>, <code>pow</code>, <code>max</code>, <code>min</code>.</p>
 
         <h3><code>bring struct</code> - Lightweight Structs</h3>
         <p>Simple dict-based struct helpers. A "struct" in Pitruck is just a <code>Dict</code> with named fields. Because dict field access (both via dot-notation <code>obj.name</code> and bracket-notation <code>obj["name"]</code>) is symmetric for reads and writes, you can use these helpers to spawn record-shaped values and then mutate them with the natural dot-assignment syntax.</p>
         <pre><code>bring struct
 var person = struct({ "name": "", "age": 0 })
-person.name = "Alice"        # works - dicts support dot-assignment
+person.name = "Alice"        // works - dicts support dot-assignment
 person.age  = 30
 var copy = struct_copy(person)
 copy.name = "Bob"
-print person.name            # Alice  (deep clone preserves the original)
-print copy.name              # Bob</code></pre>
+print person.name            // Alice  (deep clone preserves the original)
+print copy.name              // Bob</code></pre>
         <table>
             <tr><th>Function</th><th>Description</th></tr>
             <tr><td><code>struct(template)</code></td><td>Deep-clone a template dict so the caller's literal is not aliased. Returns an empty dict if <code>template</code> is <code>null</code>.</td></tr>
@@ -804,13 +802,13 @@ print copy.name              # Bob</code></pre>
         <h3><code>bring system</code> - System Helpers</h3>
         <p>Wrapper functions that call the <code>sys_*</code> built-ins with shorter, more readable names.</p>
         <pre><code>bring system
-print os()                              # "linux" / "windows" / "macos"
-print get_env("HOME")                   # /home/alice
-write_file("out.txt", "Hello, world")   # writes a file
-var contents = read_file("out.txt")     # "Hello, world"
-print file_exists("out.txt")            # true
-clear_screen()                          # ANSI clear
-exit(0)                                 # terminate the process</code></pre>
+print os()                              // "linux" / "windows" / "macos"
+print get_env("HOME")                   // /home/alice
+write_file("out.txt", "Hello, world")   // writes a file
+var contents = read_file("out.txt")     // "Hello, world"
+print file_exists("out.txt")            // true
+clear_screen()                          // ANSI clear
+exit(0)                                 // terminate the process</code></pre>
         <table>
             <tr><th>Function</th><th>Description</th></tr>
             <tr><td><code>os()</code></td><td>Returns the host OS name (<code>linux</code>, <code>windows</code>, <code>macos</code>).</td></tr>
@@ -833,9 +831,9 @@ exit(0)                                 # terminate the process</code></pre>
         <h3><code>bring time</code> - Time Utilities</h3>
         <p>Simple wrappers for the <code>time()</code>, <code>timestamp()</code>, and <code>sys_sleep()</code> built-ins.</p>
         <pre><code>bring time
-print now()              # "19:17:59" (current wall-clock time, HH:MM:SS)
-print timestamp()        # 1750000000 (Unix epoch seconds)
-sleep(1000)              # blocks for 1 second</code></pre>
+print now()              // "19:17:59" (current wall-clock time, HH:MM:SS)
+print timestamp()        // 1750000000 (Unix epoch seconds)
+sleep(1000)              // blocks for 1 second</code></pre>
         <table>
             <tr><th>Function</th><th>Description</th></tr>
             <tr><td><code>now()</code></td><td>Current wall-clock time as <code>"HH:MM:SS"</code> (UTC).</td></tr>
@@ -847,13 +845,13 @@ sleep(1000)              # blocks for 1 second</code></pre>
         <p><code>lib/std.pr</code> is a convenience meta-module. <code>bring std</code> is equivalent to bringing color, math, struct, system, and time in a single line, plus it defines the <code>uuid_v4()</code> function for generating RFC-4122 v4 UUIDs.</p>
         <pre><code>bring std
 
-# Now all of these are globally callable:
-print red("error")               # from color
-print sqrt(81)                   # from math
-var p = struct({ "x": 0 })       # from struct
-print os()                       # from system
-print now()                      # from time
-print uuid_v4()                  # 5f1a9c2d-3e44-4b7a-9c1d-2a5e7f3b8a04</code></pre>
+// Now all of these are globally callable:
+print red("error")               // from color
+print sqrt(81)                   // from math
+var p = struct({ "x": 0 })       // from struct
+print os()                       // from system
+print now()                      // from time
+print uuid_v4()                  // 5f1a9c2d-3e44-4b7a-9c1d-2a5e7f3b8a04</code></pre>
         <table>
             <tr><th>Function</th><th>Description</th></tr>
             <tr><td><code>uuid_v4()</code></td><td>Generates a random RFC-4122 v4 UUID string of the form <code>xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx</code> where <code>y</code> ∈ {8, 9, a, b}.</td></tr>
@@ -927,8 +925,8 @@ app.run()</code></pre>
         </table>
         <pre><code>var count = app.state(0)
 count.set(10)
-count.update((v) => v + 1)   # count is now 11
-print count.get()            # 11</code></pre>
+count.update((v) => v + 1)   // count is now 11
+print count.get()            // 11</code></pre>
 
         <h4>UI - Element Constructors</h4>
         <p>The <code>UI</code> class has ~40 methods that build element-tree dicts. Each method returns a dict with <code>kind</code>, <code>tag</code>, <code>cls</code>, <code>style</code>, <code>attrs</code>, and <code>children</code> fields. The renderer (<code>_tk_render</code>) walks this tree and produces an HTML string.</p>
@@ -952,26 +950,26 @@ ui.input_password(name, placeholder, value)
 ui.input_number(name, placeholder, value)
 ui.textarea(name, placeholder, value)
 ui.checkbox(name, value_label)
-ui.select(name, options)              # options is a list of strings
-ui.form(app, children, on_submit)     # wires a data-trucky-submit action
-ui.submit(label)                      # <button type="submit">
-ui.button(app, label, onclick, variant)  # variant: "primary"|"secondary"|"outline"|"ghost"|"danger"
-ui.error_for(app, field)              # error message slot bound to a field</code></pre>
+ui.select(name, options)              // options is a list of strings
+ui.form(app, children, on_submit)     // wires a data-trucky-submit action
+ui.submit(label)                      // <button type="submit">
+ui.button(app, label, onclick, variant)  // variant: "primary"|"secondary"|"outline"|"ghost"|"danger"
+ui.error_for(app, field)              // error message slot bound to a field</code></pre>
         <p><strong>Display elements</strong>:</p>
-        <pre><code>ui.badge(value, variant)           # variant: "primary"|"success"|"warning"|...
+        <pre><code>ui.badge(value, variant)           // variant: "primary"|"success"|"warning"|...
 ui.alert(title, message, variant)
 ui.image(src, alt)
-ui.list(items)                      # bulleted list
-ui.table(headers, rows)             # headers: list of str; rows: list of list of str
-ui.notice_slot(app)                 # renders the current flash notice, if any</code></pre>
+ui.list(items)                      // bulleted list
+ui.table(headers, rows)             // headers: list of str; rows: list of list of str
+ui.notice_slot(app)                 // renders the current flash notice, if any</code></pre>
         <p><strong>Interactive widgets</strong> (rendered via inline JS in <code>_tk_runtime_js()</code>):</p>
-        <pre><code>ui.tabs(headers, contents, id_prefix)   # headers: list of str, contents: list of nodes
+        <pre><code>ui.tabs(headers, contents, id_prefix)   // headers: list of str, contents: list of nodes
 ui.modal(id, btn_text, title, content)
 ui.tooltip(content, tip_text)
 ui.toast(id, text)</code></pre>
         <p><strong>Low-level helpers</strong>:</p>
-        <pre><code>ui.text(value)    # creates a text node, OR a state node if value is a StateRef
-ui.raw(html_str)  # injects raw HTML without escaping (use with care!)</code></pre>
+        <pre><code>ui.text(value)    // creates a text node, OR a state node if value is a StateRef
+ui.raw(html_str)  // injects raw HTML without escaping (use with care!)</code></pre>
         <div class="warning">
             <strong>Pitfall - do not double-wrap state nodes:</strong> The text-accepting element methods (<code>ui.h1</code>, <code>ui.p</code>, <code>ui.span</code>, etc.) internally call <code>self.text(value)</code>. If you pass them a <code>StateRef</code>, they will detect it and create a state node. If you pass them an already-built node dict (e.g. <code>ui.h2(ui.text(counter))</code>), the inner <code>ui.text(counter)</code> correctly returns a state node - but the outer <code>ui.h2</code> then re-wraps that state dict as a plain text node, calling <code>to_string()</code> on it and producing JSON output. <strong>Pass StateRefs directly: <code>ui.h2(counter)</code>, not <code>ui.h2(ui.text(counter))</code>.</strong>
         </div>
@@ -1090,7 +1088,7 @@ app.run()</code></pre>
     <section id="changelog">
         <h2>Changelog</h2>
 
-        <h3>1.6 -> 1.6.1 (library & permissions fix-up release)</h3>
+        <h3>1.6.0-> 1.6.1 (library & permissions fix-up release)</h3>
 
         <div class="changelog-item">
             <span class="changelog-tag tag-fixed">Fixed</span>
@@ -1121,96 +1119,10 @@ app.run()</code></pre>
             <strong>Library documentation rewritten</strong>
             - The "Bundled Libraries" section of the technical reference now matches the actual API surface of every library. The Trucky section in particular was completely wrong before - it described a <code>Signal</code> class, bare <code>el</code>/<code>text</code>/<code>state</code>/<code>render</code> functions, and an <code>App</code> class with methods like <code>load_form</code> / <code>build_ui</code>, none of which exist. The new docs describe the actual <code>Trucky</code>, <code>UI</code>, and <code>StateRef</code> classes, every UI constructor, the rendering pipeline, session persistence, theming, and a complete form-validation example. A new "Quickstart: How To Use Libraries" section at the top calls out the common pitfall that <code>bring foo</code> does NOT create a <code>foo</code> variable.
         </div>
-
-        <h3>1.5 -> 1.6</h3>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-new">New</span>
-            <strong>Native HTTPS support (outbound &amp; inbound)</strong>
-            - <code>http_request</code> now supports HTTPS URLs via <code>rustls</code> + <code>webpki-roots</code> with automatic certificate verification. The inbound server supports <code>--https</code> with auto-generated self-signed dev certs (cached in <code>.pitruck-tls/</code>) or user-supplied PEM files via <code>--tls-cert</code>/<code>--tls-key</code>. Chunked transfer-encoding responses are now decoded correctly.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-new">New</span>
-            <strong>Server Store (persistent key-value storage)</strong>
-            - Five new built-in functions: <code>server_set</code>, <code>server_get</code>, <code>server_has</code>, <code>server_delete</code>, <code>server_keys</code>. Thread-safe, in-memory store shared across all request handlers in serve mode.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-new">New</span>
-            <strong>Serve-mode permission controls</strong>
-            - <code>--allow-read</code>, <code>--allow-write</code>, <code>--allow-net</code>, <code>--allow-all</code> flags. By default, all potentially dangerous operations are disabled in serve mode for security.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-new">New</span>
-            <strong>Program cache for serve mode</strong>
-            - Compiled ASTs are cached by file modification time. Repeated requests skip lex and parse phases entirely, significantly improving response latency.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-new">New</span>
-            <strong><code>--debug</code> server flag</strong>
-            - Verbose runtime error output to stderr for easier debugging during development.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-new">New</span>
-            <strong>Bundled library: <code>trucky</code></strong>
-            - A full web framework module with reactive state management (Signal pattern), declarative HTML element construction, form handling with validation, and alert/notice rendering.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-enhanced">Enhanced</span>
-            <strong>String indexing</strong>
-            - <code>str[idx]</code> now returns the character at the given index, matching list-like access semantics. Out-of-bounds access throws a <code>RuntimeError</code>.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-enhanced">Enhanced</span>
-            <strong>JSON encoding of Instances</strong>
-            - <code>json_encode</code> now serializes <code>Instance</code> values as their field dictionary, making it easy to return object data as JSON from API endpoints.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-fixed">Fixed</span>
-            <strong>Division by zero</strong>
-            - Previously returned <code>Infinity</code>/<code>-Infinity</code>/<code>NaN</code>. Now throws a <code>RuntimeError</code> with message "division by zero" for safer, predictable scripting.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-fixed">Fixed</span>
-            <strong>Variable redeclaration guard</strong>
-            - Redeclaring a variable with <code>var</code> in the same scope now throws a <code>RuntimeError</code> instead of silently shadowing or overwriting.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-fixed">Fixed</span>
-            <strong>Catch-block scoping</strong>
-            - The <code>catch (err)</code> variable is now properly scoped to the catch block and does not leak into the surrounding scope.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-removed">Removed</span>
-            <strong>Outbound HTTPS limitation</strong>
-            - The old note "HTTPS is not natively supported by the outbound client" is no longer accurate; full HTTPS/TLS support is now built in.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-security">Security</span>
-            <strong>Default-deny permissions in serve mode</strong>
-            - File I/O and network access are now disabled by default when running <code>--serve</code>, preventing accidental exposure. Users must explicitly opt in with <code>--allow-read</code>, <code>--allow-write</code>, or <code>--allow-net</code>.
-        </div>
-
-        <div class="changelog-item">
-            <span class="changelog-tag tag-security">Security</span>
-            <strong>Auto-generated TLS certs use <code>rcgen</code></strong>
-            - Dev self-signed certificates are generated with proper SANs (localhost + 127.0.0.1), CA constraints, and key usage flags for safer local development HTTPS.
-        </div>
     </section>
 
     <footer>
-        <p>This reference is made by AI.</p>
+        <p>This reference is made by AI <strong>with</strong> human revision.</p>
     </footer>
 
 </main>
