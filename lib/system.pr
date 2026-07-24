@@ -1,0 +1,38 @@
+// Pitruck v1.6
+//
+// Usage:
+//   bring system
+//   print system.os()                       # "linux" / "windows" / "macos"
+//   var home = system.get_env("HOME")
+//   system.write_file("out.txt", "Hello, world")
+//   var contents = system.read_file("out.txt")
+//   system.clear_screen()
+//   system.exit(0)
+
+func os() {
+    return sys_os()
+}
+
+func clear_screen() {
+    clear()
+}
+
+func exit(code) {
+    sys_exit(code)
+}
+
+func get_env(key) {
+    return sys_env(key)
+}
+
+func write_file(path, contents) {
+    return sys_writefile(path, contents)
+}
+
+func read_file(path) {
+    return sys_readfile(path)
+}
+
+func file_exists(path) {
+    return sys_fileexists(path)
+}

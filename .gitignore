@@ -1,6 +1,10 @@
+.pitruck-tls/
+.idea/
+
 target/
+
+tests/
+
 Cargo.lock
 index.pr
 test_https.pr
-.pitruck-tls/
-.idea/

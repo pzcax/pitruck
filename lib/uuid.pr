@@ -1,0 +1,30 @@
+// Pitruck v1.6
+//
+// Usage:
+//   bring std
+//   var id = uuid_v4()
+//   print id    # e.g. "5f1a9c2d-3e44-4b7a-9c1d-2a5e7f3b8a04"
+
+func uuid_v4() {
+    var hex_chars = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
+    var y_chars = ["8", "9", "a", "b"]
+
+    func get_hex(count) {
+        var res = ""
+        var i = 0
+        while i < count {
+            var idx = rand(0, 15)
+            res = res + hex_chars[idx]
+            i = i + 1
+        }
+        return res
+    }
+
+    var p1 = get_hex(8)
+    var p2 = get_hex(4)
+    var p3 = "4" + get_hex(3)
+    var p4 = y_chars[rand(0, 3)] + get_hex(3)
+    var p5 = get_hex(12)
+
+    return p1 + "-" + p2 + "-" + p3 + "-" + p4 + "-" + p5
+}

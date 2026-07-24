@@ -1,0 +1,58 @@
+// Pitruck v1.6
+//
+// Usage:
+//   bring color
+//   print color.red("Error!")
+//   print color.bold(color.green("Success!"))
+
+func red(text) {
+    return "\x1b[31m" + text + "\x1b[0m"
+}
+
+func green(text) {
+    return "\x1b[32m" + text + "\x1b[0m"
+}
+
+func blue(text) {
+    return "\x1b[34m" + text + "\x1b[0m"
+}
+
+func yellow(text) {
+    return "\x1b[33m" + text + "\x1b[0m"
+}
+
+func cyan(text) {
+    return "\x1b[36m" + text + "\x1b[0m"
+}
+
+func magenta(text) {
+    return "\x1b[35m" + text + "\x1b[0m"
+}
+
+func white(text) {
+    return "\x1b[37m" + text + "\x1b[0m"
+}
+
+func black(text) {
+    return "\x1b[30m" + text + "\x1b[0m"
+}
+
+func bg_red(text) {
+    return "\x1b[41m" + text + "\x1b[0m"
+}
+
+func bg_green(text) {
+    return "\x1b[42m" + text + "\x1b[0m"
+}
+
+func bg_blue(text) {
+    return "\x1b[44m" + text + "\x1b[0m"
+}
+
+func bold(text) {
+    return "\x1b[1m" + text + "\x1b[0m"
+}
+
+func underline(text) {
+    return "\x1b[4m" + text + "\x1b[0m"
+}

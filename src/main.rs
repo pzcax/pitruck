@@ -27,6 +27,17 @@ use value::Value;
 use ahash::AHashMap as HashMap;
 
 fn run_source(source: &str, script_path: Option<&str>, show_perf: bool) -> bool {
+    run_source_with_perms(source, script_path, show_perf, true, true, true)
+}
+
+fn run_source_with_perms(
+    source: &str,
+    script_path: Option<&str>,
+    show_perf: bool,
+    allow_read: bool,
+    allow_write: bool,
+    allow_net: bool,
+) -> bool {
     let total = Instant::now();
 
     let t0 = Instant::now();
@@ -51,6 +62,8 @@ fn run_source(source: &str, script_path: Option<&str>, show_perf: bool) -> bool 
     if let Some(path) = script_path {
         vm.set_script_path(path);
     }
+
+    vm.set_permissions(allow_read, allow_write, allow_net);
     let ok = match vm.run(&program) {
         Ok(_)  => true,
         Err(e) => { eprintln!("{e}"); false }
@@ -162,9 +175,10 @@ fn repl() {
     let stdin  = io::stdin();
     let stdout = io::stdout();
 
-    println!("Pitruck v1.6 - type 'exit' to quit");
+    println!("Pitruck v1.6.1 - type 'exit' to quit");
 
     let mut vm = Interpreter::new();
+    vm.set_permissions(true, true, true);
 
     loop {
         print!(">> ");
@@ -375,12 +389,14 @@ fn main() {
 
     match args[1].as_str() {
         "--help" => {
-            println!("Pitruck v1.6");
+            println!("Pitruck v1.6.1");
             println!("Usage: pitruck [command] [args]");
             println!();
             println!("Commands:");
-            println!("  [file.pr]                         Run a source file");
+            println!("  [file.pr]                         Run a source file (read/write/net allowed by default)");
             println!("  [file.pr] --speed                 Run and show execution timing");
+            println!("  [file.pr] --deny-write            Run with file writes disabled");
+            println!("  [file.pr] --deny-all              Run with read/write/net all disabled");
             println!("  --serve <file.pr> [--port N]      Serve file.pr as an HTTP handler");
             println!("  --serve <dir/>    [--port N]      File-based routing from directory");
             println!("  lib install <path|url>            Install a library");
@@ -388,14 +404,23 @@ fn main() {
             println!("  lib delete <name>                 Delete a library");
             println!("  --help                            Show this message");
             println!();
-            println!("Flags:");
+            println!("Flags (script mode - default: everything allowed):");
+            println!("  --speed            Show lex/parse/run timings");
+            println!("  --debug            (No effect in script mode; verbose serve-mode errors)");
+            println!("  --allow-read       (No-op in script mode; allowed for muscle-memory compat)");
+            println!("  --allow-write      (No-op in script mode; allowed for muscle-memory compat)");
+            println!("  --allow-net        (No-op in script mode; allowed for muscle-memory compat)");
+            println!("  --allow-all        (No-op in script mode; allowed for muscle-memory compat)");
+            println!("  --deny-read        Forbid sys_readfile in script mode");
+            println!("  --deny-write       Forbid sys_writefile in script mode");
+            println!("  --deny-net         Forbid http_request in script mode");
+            println!("  --deny-all         Forbid read, write, and net in script mode");
+            println!();
+            println!("Flags (serve mode - default: everything denied, opt in below):");
             println!("  --port N           HTTP/HTTPS port (default 8000)");
             println!("  --https            Enable HTTPS with auto-generated dev cert");
             println!("  --https --tls-cert FILE --tls-key FILE  HTTPS with your own cert");
             println!("  --debug            Verbose server error output");
-            println!("  --speed            Show lex/parse/run timings");
-            println!();
-            println!("Permissions (serve mode only, default: all denied):");
             println!("  --allow-read   Allow file read access (sys_readfile)");
             println!("  --allow-write  Allow file write access (sys_writefile)");
             println!("  --allow-net    Allow outbound HTTP/HTTPS (http_request)");
@@ -605,7 +630,17 @@ fn main() {
                 Ok(s)  => s,
                 Err(e) => { eprintln!("Cannot read file '{path}': {e}"); std::process::exit(1); }
             };
-            if !run_source(&source, Some(path), show_perf) {
+
+            let deny_all   = args.contains(&"--deny-all".to_string());
+            let deny_read  = deny_all || args.contains(&"--deny-read".to_string());
+            let deny_write = deny_all || args.contains(&"--deny-write".to_string());
+            let deny_net   = deny_all || args.contains(&"--deny-net".to_string());
+
+            let allow_read  = !deny_read;
+            let allow_write = !deny_write;
+            let allow_net   = !deny_net;
+
+            if !run_source_with_perms(&source, Some(path), show_perf, allow_read, allow_write, allow_net) {
                 std::process::exit(1);
             }
         }

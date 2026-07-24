@@ -2,18 +2,15 @@
 name = "pitruck"
 version = "1.6.0"
 edition = "2021"
-
 [[bin]]
 name = "pitruck"
 path = "src/main.rs"
-
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
-
 [dependencies]
 ahash = "0.8.12"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

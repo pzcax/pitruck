@@ -1,0 +1,19 @@
+// Simple wrappers for the time() and sys_sleep() built-ins.
+//
+// Usage:
+//   bring time
+//   var now = time.now()       # "HH:MM:SS"
+//   var ts  = time.timestamp() # unix epoch seconds
+//   time.sleep(1000)           # sleep for 1 second
+
+func now() {
+    return time()
+}
+
+func timestamp() {
+    return timestamp()
+}
+
+func sleep(ms) {
+    sys_sleep(ms)
+}

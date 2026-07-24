@@ -1074,14 +1074,18 @@ impl Interpreter {
             Stmt::Set { object, name, value, line } => {
                 let obj = self.eval_expr(object)?;
                 let val = self.eval_expr(value)?;
-                match obj {
+                match &obj {
                     Value::Instance { fields, .. } => {
                         fields.borrow_mut().insert(name.clone(), val);
                         Ok(Signal::None)
                     }
+                    Value::Dict(d) => {
+                        d.borrow_mut().insert(name.clone(), val);
+                        Ok(Signal::None)
+                    }
                     _ => Err(PitruckError::RuntimeError {
                         line: *line,
-                        message: format!("cannot set property '{name}' on a non-instance value"),
+                        message: format!("cannot set property '{name}' on a {} value", obj_type_name(&obj)),
                     }),
                 }
             }
@@ -1477,10 +1481,16 @@ impl Interpreter {
                         }
                         Err(PitruckError::RuntimeError { line: *line, message: format!("property '{name}' not found on instance") })
                     }
+                    Value::Class { methods, .. } => {
+                        if let Some(method) = methods.get(name) {
+                            return Ok(method.clone());
+                        }
+                        Err(PitruckError::RuntimeError { line: *line, message: format!("static method '{name}' not found on class") })
+                    }
                     Value::Dict(d) => {
                         Ok(d.borrow().get(name).cloned().unwrap_or(Value::Null))
                     }
-                    _ => Err(PitruckError::RuntimeError { line: *line, message: format!("cannot access property '{name}' on a non-instance value") }),
+                    _ => Err(PitruckError::RuntimeError { line: *line, message: format!("cannot access property '{name}' on a {} value", obj_type_name(&obj)) }),
                 }
             }
 
@@ -1660,7 +1670,7 @@ impl Interpreter {
             BinOpKind::Gt    => Err(type_err("'>' requires numbers")),
             BinOpKind::LtEq  => Err(type_err("'<=' requires numbers")),
             BinOpKind::GtEq  => Err(type_err("'>=' requires numbers")),
-            BinOpKind::And | BinOpKind::Or | BinOpKind::Coalesce => unreachable!("And/Or/Coalesce short-circuit in eval_expr"),
+            BinOpKind::And | BinOpKind::Or | BinOpKind::Coalesce => unreachable!("And/Or/Coalesce short circuit in eval_expr"),
         }
     }
 
@@ -1673,5 +1683,20 @@ impl Interpreter {
             (Value::Null, Value::Null) => true,
             _ => false,
         }
+    }
+}
+
+fn obj_type_name(v: &Value) -> &'static str { // fuck fuck fuck fuck fix this 
+    match v {
+        Value::Number(_)         => "number",
+        Value::Str(_)            => "string",
+        Value::Bool(_)           => "bool",
+        Value::Null              => "null",
+        Value::List(_)           => "list",
+        Value::Dict(_)           => "dict",
+        Value::Function { .. }   => "function",
+        Value::Class { .. }      => "class",
+        Value::Instance { .. }   => "instance",
+        Value::BoundMethod { .. }=> "bound-method",
     }
 }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pitruck 1.6 - Technical Reference</title>
+    <title>Pitruck 1.6.1 - Technical Reference</title>
     <style>
         :root {
             --bg: #090d16;
@@ -260,7 +260,7 @@
 <body>
 
 <nav>
-    <h2>Pitruck 1.6</h2>
+    <h2>Pitruck 1.6.1</h2>
     <ul>
         <li><a href="#intro">Introduction</a></li>
         <li><a href="#getting-started">Getting Started</a></li>
@@ -283,7 +283,7 @@
 
 <main>
     <section id="intro">
-        <h1>Pitruck 1.6 Technical Reference</h1>
+        <h1>Pitruck 1.6.1 Technical Reference</h1>
         <p>Pitruck is a dynamically-typed, interpreted scripting language implemented in Rust. It features a lightweight, C-style syntax with modern conveniences like optional chaining, null-coalescing, pattern matching, template strings, and first-class functions.</p>
         <p>A major feature of Pitruck is its built-in HTTP server capabilities, allowing scripts to be instantly served as web endpoints with zero external dependencies. Version 1.6 introduces native HTTPS support for both outbound requests and inbound server mode, a persistent server store for cross-request state, permission controls for serve mode, and a program cache for faster repeated request handling.</p>
     </section>
@@ -298,15 +298,33 @@
         <h3>CLI Usage</h3>
         <p>The Pitruck executable provides a REPL, script runner, package manager, and a web server:</p>
         <pre><code>pitruck                             # Start the interactive REPL
-pitruck script.pr                   # Run a source file
+pitruck script.pr                   # Run a source file (read/write/net allowed by default)
 pitruck script.pr --speed           # Run and show execution timing (lex, parse, run)
+pitruck script.pr --deny-write      # Run with file writes disabled
+pitruck script.pr --deny-all        # Run with read/write/net all disabled
 pitruck --serve script.pr           # Serve script.pr as an HTTP handler (port 8000)
 pitruck --serve public/ --port 8080 # Serve a directory using file-based routing
 pitruck --serve script.pr --https   # Serve with auto-generated self-signed HTTPS
 pitruck --serve script.pr --https --tls-cert cert.pem --tls-key key.pem  # Serve with custom HTTPS cert
-pitruck lib install &lt;url&gt;           # Download and install a library
+pitruck lib install &lt;url|path&gt;      # Download or copy a library into lib/
 pitruck lib list                    # List installed libraries
 pitruck lib delete &lt;name&gt;           # Remove an installed library</code></pre>
+
+        <h3>Script-Mode Flags (running <code>pitruck file.pr</code>)</h3>
+        <p>When running a script directly (NOT in <code>--serve</code> mode), file I/O and outbound networking are <strong>allowed by default</strong>. The user is explicitly running a local script, so the serve-mode default-deny posture does not apply. You can opt out with the <code>--deny-*</code> flags:</p>
+        <table>
+            <tr><th>Flag</th><th>Description</th></tr>
+            <tr><td><code>--speed</code></td><td>Show lex/parse/run timings.</td></tr>
+            <tr><td><code>--debug</code></td><td>No effect in script mode (verbose serve-mode errors).</td></tr>
+            <tr><td><code>--allow-read</code> / <code>--allow-write</code> / <code>--allow-net</code> / <code>--allow-all</code></td><td>No-op in script mode. Accepted for muscle-memory compatibility with serve mode.</td></tr>
+            <tr><td><code>--deny-read</code></td><td>Forbid <code>sys_readfile</code> in script mode.</td></tr>
+            <tr><td><code>--deny-write</code></td><td>Forbid <code>sys_writefile</code> in script mode.</td></tr>
+            <tr><td><code>--deny-net</code></td><td>Forbid <code>http_request</code> in script mode.</td></tr>
+            <tr><td><code>--deny-all</code></td><td>Forbid read, write, and net in script mode (equivalent to all three above).</td></tr>
+        </table>
+        <div class="note">
+            <strong>Why this matters:</strong> Before Pitruck 1.6.1, calling <code>write_file(...)</code> / <code>read_file(...)</code> from a script run via <code>pitruck main.pr</code> would fail with <em>"file write access is not allowed in this context"</em>, even when passing <code>--allow-write</code>. The flags were only parsed in <code>--serve</code> mode. Scripts now run with full permissions by default; pass <code>--deny-all</code> if you want to lock down an untrusted script.
+        </div>
 
         <h3>Serve-Mode Flags</h3>
         <p>When running in <code>--serve</code> mode, the following flags are available:</p>
@@ -324,6 +342,18 @@ pitruck lib delete &lt;name&gt;           # Remove an installed library</code></
         <div class="note">
             <strong>Default Permissions:</strong> In serve mode, all potentially dangerous operations (file read, file write, outbound HTTP) are <strong>disabled by default</strong> for security. You must explicitly opt in with <code>--allow-read</code>, <code>--allow-write</code>, <code>--allow-net</code>, or <code>--allow-all</code>.
         </div>
+
+        <h3>Quickstart: How To Use Libraries</h3>
+        <p>Pitruck ships with seven bundled libraries in the <code>lib/</code> directory: <code>color</code>, <code>math</code>, <code>struct</code>, <code>system</code>, <code>time</code>, <code>std</code> (a meta-module that brings all of the previous five plus <code>uuid_v4</code>), and <code>trucky</code> (a web framework). Load any of them with the <code>bring</code> keyword:</p>
+        <pre><code>bring std              # brings color + math + struct + system + time + uuid_v4
+bring system           # brings just the system helpers
+bring trucky           # brings the web framework classes (Trucky, UI, StateRef)
+
+print os()             # "linux" / "windows" / "macos"
+var p = struct({ "name": "", "age": 0 })
+p.name = "Alice"       # works! dicts support dot-assignment since 1.6.1
+print p.name           # Alice</code></pre>
+        <p>After <code>bring &lt;module&gt;</code>, every top-level <code>func</code> and <code>class</code> defined in that module becomes a global name in your script. There is no <code>module.function()</code> namespace - just call the function directly. The full reference for each library is in the <a href="#libraries">Bundled Libraries</a> section below.</p>
     </section>
 
     <section id="lexical">
@@ -509,10 +539,26 @@ p.greet()</code></pre>
 
     <section id="modules">
         <h2>Modules & Imports</h2>
-        <p>Use the <code>bring</code> keyword to load external <code>.pr</code> files. The interpreter searches the current directory, the <code>lib/</code> subdirectory, the executable's path, and its parent directories.</p>
-        <pre><code>bring math_utils  # Loads math_utils.pr or lib/math_utils.pr
-# Functions/Classes defined in the module become available in the global scope.</code></pre>
-        <p>Note: Modules are executed in the global context and modify the global scope. Module inclusion is cached (a module is only loaded once per execution).</p>
+        <p>Use the <code>bring</code> keyword to load external <code>.pr</code> files. The interpreter searches the following locations, in order, and loads the first match:</p>
+        <ol>
+            <li>The directory of the current script (or the resolved directory of the parent module).</li>
+            <li><code>&lt;script_dir&gt;/lib/&lt;name&gt;.pr</code></li>
+            <li>The current working directory</li>
+            <li><code>./lib/&lt;name&gt;.pr</code></li>
+            <li>The directory of the Pitruck executable, then <code>&lt;exe_dir&gt;/lib/&lt;name&gt;.pr</code></li>
+            <li>Up to three parent directories of the executable, looking for <code>lib/&lt;name&gt;.pr</code></li>
+        </ol>
+        <pre><code>bring math
+bring color
+bring trucky
+
+bring color
+print red("error text")
+print bold(underline("hi"))</code></pre>
+        <p>Modules are executed in the global context and modify the global scope. Module inclusion is cached: a module is only loaded once per execution, so duplicate <code>bring</code> statements (including from inside other modules) are no-ops.</p>
+        <div class="note">
+            <strong>Common pitfall:</strong> A bare <code>bring foo</code> does <em>not</em> create a variable called <code>foo</code>. It just runs <code>foo.pr</code> in the global scope. If <code>foo.pr</code> defines <code>func bar()</code>, you call it as <code>bar()</code> - never as <code>foo.bar()</code>. (You can still write <code>foo.bar()</code> if <code>foo.pr</code> happens to define a class named <code>foo</code> with a static method <code>bar</code>; that's a separate feature of the language, not of <code>bring</code>.)
+        </div>
     </section>
 
     <section id="error-handling">
@@ -589,6 +635,10 @@ if count == null { count = "0" }
 var n = to_number(count) + 1
 server_set("visits", to_string(n))
 response.body = "Visits: " + to_string(n)</code></pre>
+
+        <div class="note">
+            <strong>Note:</strong> The script runs every time a request is given to the server, so without verification, the above script will incrememnt visits by 2 every visit because you are also requesting <code>GET /favicon.ico</code>.
+        </div>
 
         <h3>Program Cache</h3>
         <p>In serve mode, Pitruck caches the compiled AST of each script by its file modification time. If the file hasn't changed since the last request, the cached program is reused, skipping the lex and parse phases entirely. This significantly improves response latency for repeated requests.</p>
@@ -685,113 +735,326 @@ if request.path == "/api" {
 
     <section id="libraries">
         <h2>Bundled Libraries</h2>
-        <p>Pitruck ships with several standard library modules in the <code>lib/</code> directory. Use <code>bring</code> to load them.</p>
+        <p>Pitruck ships with seven libraries in the <code>lib/</code> directory. Every library is a plain <code>.pr</code> file that you load with the <code>bring</code> keyword. After <code>bring</code>, the functions and classes defined in the file become global names in your script - there is no module namespace, you just call the function directly.</p>
 
-        <h3><code>bring color</code> — Terminal Colors</h3>
-        <p>ANSI escape-code wrappers for coloring and styling terminal output. Each function takes a string and returns it wrapped in the appropriate escape sequence.</p>
-        <pre><code>bring color
-print color.red("Error!")
-print color.green("Success!")
-print color.bold("Important")
-print color.bg_blue("Highlighted")</code></pre>
-        <p>Available functions: <code>red</code>, <code>green</code>, <code>blue</code>, <code>yellow</code>, <code>cyan</code>, <code>magenta</code>, <code>white</code>, <code>black</code>, <code>bg_red</code>, <code>bg_green</code>, <code>bg_blue</code>, <code>bold</code>, <code>underline</code>.</p>
+        <div class="note">
+            <strong>Read this first:</strong> The following call styles are <strong>WRONG</strong> and will fail with "cannot find variable" or "static method not found":
+            <pre><code>bring system
+print system.os()         # WRONG - `system` is not a variable
+bring color
+print color.red("hi")     # WRONG - `color` is not a variable</code></pre>
+            The correct style is to call the bare function name:
+            <pre><code>bring system
+print os()                # OK
+bring color
+print red("hi")           # OK</code></pre>
+            (The only exception is when a library defines a class with the same name as the file - e.g. <code>trucky.pr</code> defines <code>class Trucky</code> - in which case you instantiate it with <code>var app = Trucky()</code> and call methods like <code>app.run()</code>.)
+        </div>
 
-        <h3><code>bring math</code> — Math Utilities</h3>
-        <p>Convenience wrappers around built-in math functions, plus <code>max</code>/<code>min</code> and <code>inc</code>.</p>
-        <pre><code>bring math
-print math.abs(-5)       # 5
-print math.sqrt(16)      # 4
-print math.pow(2, 3)     # 8
-print math.max(10, 20)   # 20
-print math.min(10, 20)   # 10
-print math.inc(7)        # 8</code></pre>
-        <p>Available functions: <code>inc</code>, <code>abs</code>, <code>sqrt</code>, <code>pow</code>, <code>max</code>, <code>min</code>.</p>
-
-        <h3><code>bring struct</code> — Lightweight Structs</h3>
-        <p>Simple dict-based struct utilities. <code>struct_new</code> creates a deep-cloned dict from a template, and <code>struct_copy</code> produces a deep clone of an existing struct.</p>
-        <pre><code>bring struct
-var person = struct_new({ "name": "", "age": 0 })
-person.name = "Alice"
-person.age = 30
-var copy = struct_copy(person)</code></pre>
-
-        <h3><code>bring system</code> — System Helpers</h3>
-        <p>Wrapper functions that call the <code>sys_*</code> built-ins with shorter, more readable names.</p>
-        <pre><code>bring system
-print system.os()
-system.clear_screen()
-system.exit(0)
-var home = system.get_env("HOME")
-system.write_file("out.txt", "Hello")
-var contents = system.read_file("out.txt")</code></pre>
-        <p>Available functions: <code>os</code>, <code>clear_screen</code>, <code>exit</code>, <code>get_env</code>, <code>write_file</code>, <code>read_file</code>.</p>
-
-        <h3><code>bring time</code> — Time Utilities</h3>
-        <p>Simple wrappers for the <code>time()</code> and <code>sys_sleep()</code> built-ins.</p>
-        <pre><code>bring time
-var now = time.now()
-time.sleep(1000)  # Sleep for 1 second</code></pre>
-
-        <h3><code>bring trucky</code> — Web Framework</h3>
-        <p><strong>Trucky</strong> is a bundled web framework library for building HTML UIs and handling form submissions in Pitruck serve mode. It provides reactive state management, declarative HTML element construction, form handling with validation, and alert/notice rendering.</p>
-
-        <h4>State Management (Signal Pattern)</h4>
-        <p>Trucky uses a <code>Signal</code> pattern for reactive state. A signal wraps a mutable value and notifies dependent UI elements when it changes.</p>
-        <pre><code>var count = Signal(0)
-count.set(count.get() + 1)</code></pre>
-
-        <h4>HTML Element Construction</h4>
-        <p>Trucky provides helper functions for building HTML element trees declaratively. Elements are represented as dicts with <code>kind</code>, <code>tag</code>, <code>cls</code>, <code>style</code>, <code>attrs</code>, and <code>children</code> fields.</p>
-        <pre><code>var page = el("div", "container", "", {}, [
-    el("h1", "", "", {}, [text("Hello")]),
-    el("p", "desc", "", {}, [state(count)])
-])</code></pre>
-        <p>Core element functions: <code>el(tag, cls, style, attrs, children)</code>, <code>text(value)</code>, <code>state(signal)</code>, <code>raw(html_string)</code>, <code>error_slot(app, field)</code>, <code>notice_slot(app)</code>.</p>
-
-        <h4>Form Handling</h4>
-        <p>Trucky provides an <code>App</code> class that manages form data, validation errors, and alert notices. Form fields are rendered with error message slots.</p>
-        <pre><code>bring trucky
-
-class MyApp {
-    func init() {
-        self._fields = { "name": "", "email": "" }
-        self._errors = {}
-        self._notice = null
-    }
-
-    func handle_submit() {
-        var name = self.field("name")
-        if name == "" {
-            self.error_set("name", "Name is required")
-        } else {
-            self._notice = { "kind": "success", "text": "Submitted!" }
-        }
-    }
-}
-
-var app = MyApp()
-app.load_form(request.form)
-
-if request.method == "POST" {
-    app.handle_submit()
-}
-
-response.body = render(app.build_ui())</code></pre>
-
-        <h4>App Methods</h4>
         <table>
-            <tr><th>Method</th><th>Description</th></tr>
-            <tr><td><code>app.field(name)</code></td><td>Get the current value of a form field.</td></tr>
-            <tr><td><code>app.error_set(name, msg)</code></td><td>Set an error message for a field.</td></tr>
-            <tr><td><code>app.error_for(name)</code></td><td>Get the error message for a field (empty string if none).</td></tr>
-            <tr><td><code>app.has_errors()</code></td><td>Returns <code>true</code> if any validation errors are set.</td></tr>
-            <tr><td><code>app.load_form(form_dict)</code></td><td>Populate fields from a form dict (e.g., <code>request.form</code>).</td></tr>
-            <tr><td><code>app.notice_set(kind, text)</code></td><td>Set a flash notice (kind: "success", "error", "info", "warning").</td></tr>
-            <tr><td><code>app.build_ui()</code></td><td>Return the root element tree for rendering.</td></tr>
+            <tr><th>Module</th><th>File</th><th>Provides</th></tr>
+            <tr><td><code>bring color</code></td><td><code>lib/color.pr</code></td><td>13 ANSI color/style functions</td></tr>
+            <tr><td><code>bring math</code></td><td><code>lib/math.pr</code></td><td>abs, sqrt, pow, max, min, inc</td></tr>
+            <tr><td><code>bring struct</code></td><td><code>lib/struct.pr</code></td><td>struct, struct_copy</td></tr>
+            <tr><td><code>bring system</code></td><td><code>lib/system.pr</code></td><td>os, get_env, write_file, read_file, file_exists, clear_screen, exit</td></tr>
+            <tr><td><code>bring time</code></td><td><code>lib/time.pr</code></td><td>now, timestamp, sleep</td></tr>
+            <tr><td><code>bring std</code></td><td><code>lib/std.pr</code></td><td>Meta-module: brings color+math+struct+system+time, plus <code>uuid_v4()</code></td></tr>
+            <tr><td><code>bring trucky</code></td><td><code>lib/trucky.pr</code></td><td>Web framework: <code>Trucky</code>, <code>UI</code>, <code>StateRef</code> classes</td></tr>
         </table>
 
-        <h4>Rendering</h4>
-        <p>The <code>render(node)</code> function walks an element tree and produces an HTML string. It handles text escaping, state dereferencing, optional attribute rendering, and self-closing (void) tags like <code>&lt;input&gt;</code>, <code>&lt;br&gt;</code>, <code>&lt;img&gt;</code>.</p>
+        <h3><code>bring color</code> - Terminal Colors</h3>
+        <p>ANSI escape-code wrappers for coloring and styling terminal output. Each function takes a string and returns it wrapped in the appropriate escape sequence, with a reset (<code>\x1b[0m</code>) suffix so styles do not bleed into neighboring output.</p>
+        <pre><code>bring color
+print red("Error!")              # red foreground
+print green("Success!")          # green foreground
+print bold(underline("Important")) # bold + underlined
+print bg_blue("Highlighted")     # blue background</code></pre>
+        <p>Available functions: <code>red</code>, <code>green</code>, <code>blue</code>, <code>yellow</code>, <code>cyan</code>, <code>magenta</code>, <code>white</code>, <code>black</code>, <code>bg_red</code>, <code>bg_green</code>, <code>bg_blue</code>, <code>bold</code>, <code>underline</code>.</p>
+
+        <h3><code>bring math</code> - Math Utilities</h3>
+        <p>Convenience wrappers around the built-in <code>math_*</code> functions, plus <code>max</code>/<code>min</code> and <code>inc</code>.</p>
+        <pre><code>bring math
+print abs(-5)        # 5
+print sqrt(16)       # 4
+print pow(2, 3)      # 8
+print max(10, 20)    # 20
+print min(10, 20)    # 10
+print inc(7)         # 8</code></pre>
+        <p>Available functions: <code>inc</code>, <code>abs</code>, <code>sqrt</code>, <code>pow</code>, <code>max</code>, <code>min</code>.</p>
+
+        <h3><code>bring struct</code> - Lightweight Structs</h3>
+        <p>Simple dict-based struct helpers. A "struct" in Pitruck is just a <code>Dict</code> with named fields. Because dict field access (both via dot-notation <code>obj.name</code> and bracket-notation <code>obj["name"]</code>) is symmetric for reads and writes, you can use these helpers to spawn record-shaped values and then mutate them with the natural dot-assignment syntax.</p>
+        <pre><code>bring struct
+var person = struct({ "name": "", "age": 0 })
+person.name = "Alice"        # works - dicts support dot-assignment
+person.age  = 30
+var copy = struct_copy(person)
+copy.name = "Bob"
+print person.name            # Alice  (deep clone preserves the original)
+print copy.name              # Bob</code></pre>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>struct(template)</code></td><td>Deep-clone a template dict so the caller's literal is not aliased. Returns an empty dict if <code>template</code> is <code>null</code>.</td></tr>
+            <tr><td><code>struct_copy(s)</code></td><td>Deep-clone an existing struct (or any value). List and Dict children are recursively cloned; scalars are returned as-is.</td></tr>
+        </table>
+        <div class="note">
+            <strong>Under the hood:</strong> Both helpers delegate to the <code>clone()</code> builtin. Since 1.6.1, <code>obj.name = value</code> works on dicts the same way <code>obj["name"] = value</code> does - this is what makes the struct pattern usable. Previously, dot-assignment only worked on <code>Instance</code> values (created via <code>class</code> + <code>new</code>), so <code>struct({...}).name = "x"</code> crashed with "cannot set property 'name' on a non-instance value".
+        </div>
+
+        <h3><code>bring system</code> - System Helpers</h3>
+        <p>Wrapper functions that call the <code>sys_*</code> built-ins with shorter, more readable names.</p>
+        <pre><code>bring system
+print os()                              # "linux" / "windows" / "macos"
+print get_env("HOME")                   # /home/alice
+write_file("out.txt", "Hello, world")   # writes a file
+var contents = read_file("out.txt")     # "Hello, world"
+print file_exists("out.txt")            # true
+clear_screen()                          # ANSI clear
+exit(0)                                 # terminate the process</code></pre>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>os()</code></td><td>Returns the host OS name (<code>linux</code>, <code>windows</code>, <code>macos</code>).</td></tr>
+            <tr><td><code>get_env(key)</code></td><td>Reads an environment variable. Returns <code>""</code> if not set.</td></tr>
+            <tr><td><code>write_file(path, contents)</code></td><td>Writes a string to a file (overwrites).</td></tr>
+            <tr><td><code>read_file(path)</code></td><td>Reads a file's contents as a string.</td></tr>
+            <tr><td><code>file_exists(path)</code></td><td>Returns <code>true</code> if the file exists.</td></tr>
+            <tr><td><code>clear_screen()</code></td><td>Clears the terminal via ANSI escape codes.</td></tr>
+            <tr><td><code>exit(code)</code></td><td>Terminates the process with the given exit code.</td></tr>
+        </table>
+        <div class="warning">
+            <strong>Permission rules:</strong>
+            <ul>
+                <li><strong>Script mode</strong> (<code>pitruck main.pr</code>): read/write are <strong>allowed by default</strong>. Opt out with <code>--deny-read</code>, <code>--deny-write</code>, <code>--deny-net</code>, or <code>--deny-all</code>.</li>
+                <li><strong>Serve mode</strong> (<code>pitruck --serve ...</code>): read/write are <strong>denied by default</strong>. Opt in with <code>--allow-read</code>, <code>--allow-write</code>, <code>--allow-net</code>, or <code>--allow-all</code>.</li>
+            </ul>
+            Before 1.6.1, script mode inherited the serve-mode default-deny posture, so <code>write_file(...)</code> always crashed with "file write access is not allowed in this context" - even when the user passed <code>--allow-write</code>. The flags were only parsed in the <code>--serve</code> branch of <code>main.rs</code>. This is now fixed.
+        </div>
+
+        <h3><code>bring time</code> - Time Utilities</h3>
+        <p>Simple wrappers for the <code>time()</code>, <code>timestamp()</code>, and <code>sys_sleep()</code> built-ins.</p>
+        <pre><code>bring time
+print now()              # "19:17:59" (current wall-clock time, HH:MM:SS)
+print timestamp()        # 1750000000 (Unix epoch seconds)
+sleep(1000)              # blocks for 1 second</code></pre>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>now()</code></td><td>Current wall-clock time as <code>"HH:MM:SS"</code> (UTC).</td></tr>
+            <tr><td><code>timestamp()</code></td><td>Unix epoch seconds (integer-valued float).</td></tr>
+            <tr><td><code>sleep(ms)</code></td><td>Block execution for <code>ms</code> milliseconds.</td></tr>
+        </table>
+
+        <h3><code>bring std</code> - Meta-Module (everything above plus UUIDs)</h3>
+        <p><code>lib/std.pr</code> is a convenience meta-module. <code>bring std</code> is equivalent to bringing color, math, struct, system, and time in a single line, plus it defines the <code>uuid_v4()</code> function for generating RFC-4122 v4 UUIDs.</p>
+        <pre><code>bring std
+
+# Now all of these are globally callable:
+print red("error")               # from color
+print sqrt(81)                   # from math
+var p = struct({ "x": 0 })       # from struct
+print os()                       # from system
+print now()                      # from time
+print uuid_v4()                  # 5f1a9c2d-3e44-4b7a-9c1d-2a5e7f3b8a04</code></pre>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>uuid_v4()</code></td><td>Generates a random RFC-4122 v4 UUID string of the form <code>xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx</code> where <code>y</code> ∈ {8, 9, a, b}.</td></tr>
+        </table>
+
+        <h3><code>bring trucky</code> - Web Framework</h3>
+        <p><strong>Trucky</strong> is a bundled web framework library for building HTML UIs and handling form submissions in Pitruck serve mode (it also works in script mode, where it just prints the rendered HTML to stdout). It provides:</p>
+        <ul>
+            <li>Per-session reactive state management via the <code>StateRef</code> class.</li>
+            <li>Declarative HTML element construction via the <code>UI</code> class (h1–h4, p, card, button, form, input, table, tabs, modal, tooltip, toast, ...).</li>
+            <li>The <code>Trucky</code> orchestrator class that wires everything together, manages themes, dispatches actions, persists state in the server store, and renders full HTML documents.</li>
+            <li>Form validation via a schema-driven <code>validate(schema, values)</code> method.</li>
+        </ul>
+
+        <h4>Core Classes</h4>
+        <table>
+            <tr><th>Class</th><th>Purpose</th><th>Constructor</th></tr>
+            <tr><td><code>Trucky</code></td><td>The orchestrator/app instance. Holds theme, state cache, action registry, errors, notices.</td><td><code>var app = Trucky()</code> - no args.</td></tr>
+            <tr><td><code>UI</code></td><td>Element factory. All element constructors live here as methods.</td><td><code>var ui = UI()</code> - no args.</td></tr>
+            <tr><td><code>StateRef</code></td><td>A reactive reference to a value stored in the per-session server store.</td><td>Created via <code>app.state(default)</code> - do not instantiate directly.</td></tr>
+        </table>
+
+        <h4>Minimal Trucky Example</h4>
+        <pre><code>bring trucky
+
+var app = Trucky()
+app.set_theme({ "primary": "#7c3aed", "title": "Trucky Demo" })
+var ui = UI()
+
+// app.state(default_val) returns a StateRef bound to the per-session
+// store. On first GET it initialises to 0; on subsequent POSTs the
+// action fires and bumps the persisted value.
+var counter = app.state(0)
+
+func build_page() {
+    return ui.container([
+        ui.h1("Hello from Trucky"),
+        ui.card([
+            ui.card_header([ ui.h3("Counter") ]),
+            ui.card_body([
+                ui.p("Current value:"),
+                // Pass the StateRef directly to ui.h2 - internally it
+                // calls self.text(value), which detects StateRef instances
+                // and creates a state-bound text node. Do NOT wrap with
+                // ui.text() first; that would re-wrap the state node as
+                // a plain text node and stringify it.
+                ui.h2(counter),
+                ui.button(app, "Increment", () => {
+                    counter.set(counter.get() + 1)
+                    app.notify("Incremented!", "success")
+                }, "primary"),
+                ui.notice_slot(app)
+            ])
+        ])
+    ])
+}
+
+app.mount(build_page())
+app.run()</code></pre>
+        <p>Save this as <code>demo.pr</code> and run:</p>
+        <pre><code>pitruck --serve demo.pr --port 8000 --allow-all</code></pre>
+        <p>Then open <code>http://localhost:8000/</code> in a browser. Clicking the button fires an HTTP POST with the <code>X-Trucky-Action</code> header, the lambda runs server-side, the counter is incremented in the per-session server store, and the page is re-rendered with the new value.</p>
+
+        <h4>StateRef - Reactive State</h4>
+        <p>A <code>StateRef</code> is created by <code>app.state(default_val)</code>. It is bound to a per-session key in the server store, so the value persists across HTTP requests as long as the user keeps the <code>trucky_sid</code> cookie.</p>
+        <table>
+            <tr><th>Method</th><th>Description</th></tr>
+            <tr><td><code>ref.get()</code></td><td>Read the current value (lazily loaded from the server store on first access).</td></tr>
+            <tr><td><code>ref.set(v)</code></td><td>Write a new value. Persists immediately.</td></tr>
+            <tr><td><code>ref.update(fn)</code></td><td><code>ref.set(fn(ref.get()))</code> - read-modify-write shortcut.</td></tr>
+        </table>
+        <pre><code>var count = app.state(0)
+count.set(10)
+count.update((v) => v + 1)   # count is now 11
+print count.get()            # 11</code></pre>
+
+        <h4>UI - Element Constructors</h4>
+        <p>The <code>UI</code> class has ~40 methods that build element-tree dicts. Each method returns a dict with <code>kind</code>, <code>tag</code>, <code>cls</code>, <code>style</code>, <code>attrs</code>, and <code>children</code> fields. The renderer (<code>_tk_render</code>) walks this tree and produces an HTML string.</p>
+        <p><strong>Text-content elements</strong> (accept a value that may be a string, number, or StateRef):</p>
+        <pre><code>ui.h1(value)        ui.h2(value)        ui.h3(value)        ui.h4(value)
+ui.p(value)         ui.p_lead(value)    ui.p_muted(value)   ui.span(value)
+ui.code(value)      ui.blockquote(value)  ui.pre_code(value)
+ui.link(value, href)</code></pre>
+        <p><strong>Layout / container elements</strong> (accept a list of children):</p>
+        <pre><code>ui.container(children)         ui.container_sm(children)
+ui.card(children)              ui.card_header(children)     ui.card_body(children)
+ui.vstack(children, gap)       ui.hstack(children, gap)
+ui.grid(children, cols, gap)   ui.grid_auto(children, min_w, gap)
+ui.flex_between(children)      ui.flex_center(children)
+ui.divider()                   ui.spacer(height)</code></pre>
+        <p><strong>Form elements</strong>:</p>
+        <pre><code>ui.label(value, for_id)
+ui.input_text(name, placeholder, value)
+ui.input_email(name, placeholder, value)
+ui.input_password(name, placeholder, value)
+ui.input_number(name, placeholder, value)
+ui.textarea(name, placeholder, value)
+ui.checkbox(name, value_label)
+ui.select(name, options)              # options is a list of strings
+ui.form(app, children, on_submit)     # wires a data-trucky-submit action
+ui.submit(label)                      # <button type="submit">
+ui.button(app, label, onclick, variant)  # variant: "primary"|"secondary"|"outline"|"ghost"|"danger"
+ui.error_for(app, field)              # error message slot bound to a field</code></pre>
+        <p><strong>Display elements</strong>:</p>
+        <pre><code>ui.badge(value, variant)           # variant: "primary"|"success"|"warning"|...
+ui.alert(title, message, variant)
+ui.image(src, alt)
+ui.list(items)                      # bulleted list
+ui.table(headers, rows)             # headers: list of str; rows: list of list of str
+ui.notice_slot(app)                 # renders the current flash notice, if any</code></pre>
+        <p><strong>Interactive widgets</strong> (rendered via inline JS in <code>_tk_runtime_js()</code>):</p>
+        <pre><code>ui.tabs(headers, contents, id_prefix)   # headers: list of str, contents: list of nodes
+ui.modal(id, btn_text, title, content)
+ui.tooltip(content, tip_text)
+ui.toast(id, text)</code></pre>
+        <p><strong>Low-level helpers</strong>:</p>
+        <pre><code>ui.text(value)    # creates a text node, OR a state node if value is a StateRef
+ui.raw(html_str)  # injects raw HTML without escaping (use with care!)</code></pre>
+        <div class="warning">
+            <strong>Pitfall - do not double-wrap state nodes:</strong> The text-accepting element methods (<code>ui.h1</code>, <code>ui.p</code>, <code>ui.span</code>, etc.) internally call <code>self.text(value)</code>. If you pass them a <code>StateRef</code>, they will detect it and create a state node. If you pass them an already-built node dict (e.g. <code>ui.h2(ui.text(counter))</code>), the inner <code>ui.text(counter)</code> correctly returns a state node - but the outer <code>ui.h2</code> then re-wraps that state dict as a plain text node, calling <code>to_string()</code> on it and producing JSON output. <strong>Pass StateRefs directly: <code>ui.h2(counter)</code>, not <code>ui.h2(ui.text(counter))</code>.</strong>
+        </div>
+
+        <h4>Trucky (App) - Methods</h4>
+        <table>
+            <tr><th>Method</th><th>Description</th></tr>
+            <tr><td><code>app.set_theme(overrides)</code></td><td>Apply theme overrides. Recognized keys: <code>primary</code>, <code>secondary</code>, <code>accent</code>, <code>background</code>, <code>background_alt</code>, <code>text</code>, <code>text_muted</code>, <code>border</code>, <code>success</code>, <code>error</code>, <code>warning</code>, <code>info</code>, <code>radius</code>, <code>title</code>.</td></tr>
+            <tr><td><code>app.state(default_val)</code></td><td>Create or restore a StateRef for the next available state slot. On first contact per session, initialises to <code>default_val</code>; thereafter restores the persisted value.</td></tr>
+            <tr><td><code>app.action(fn)</code></td><td>Register a callback (zero-arg function/lambda) and return its action id (e.g. <code>"act0"</code>). The callback fires when a POST request arrives with <code>X-Trucky-Action: &lt;id&gt;</code>.</td></tr>
+            <tr><td><code>app.form_value(name)</code></td><td>Read a field from the incoming JSON form body of an action POST.</td></tr>
+            <tr><td><code>app.set_errors(errors_dict)</code></td><td>Replace the current field-error map.</td></tr>
+            <tr><td><code>app.error_for(name)</code></td><td>Get the error message for a field (empty string if none).</td></tr>
+            <tr><td><code>app.notify(text, kind)</code></td><td>Set a flash notice. <code>kind</code> ∈ {<code>success</code>, <code>error</code>, <code>info</code>, <code>warning</code>}.</td></tr>
+            <tr><td><code>app.validate(schema, values)</code></td><td>Validate <code>values</code> against <code>schema</code>. Returns an errors dict. Schema fields: <code>required</code> (bool), <code>type</code> (<code>"number"</code>), <code>min</code>, <code>max</code>, <code>minlen</code>, <code>maxlen</code>.</td></tr>
+            <tr><td><code>app.mount(tree)</code></td><td>Install the root element tree.</td></tr>
+            <tr><td><code>app.run()</code></td><td>Render the tree. In serve mode, sets <code>response.body</code> and <code>response.headers["Content-Type"]</code>. In script mode, prints the rendered HTML to stdout.</td></tr>
+        </table>
+
+        <h4>Form Validation Example</h4>
+        <pre><code>bring trucky
+
+var app = Trucky()
+var ui = UI()
+
+var schema = {
+    "name":  { "required": true, "minlen": 2, "maxlen": 50 },
+    "email": { "required": true, "minlen": 5 },
+    "age":   { "type": "number", "min": 18, "max": 120 }
+}
+
+func handle_submit() {
+    var form = {
+        "name":  app.form_value("name"),
+        "email": app.form_value("email"),
+        "age":   app.form_value("age")
+    }
+    var errors = app.validate(schema, form)
+    app.set_errors(errors)
+    if len(keys(errors)) == 0 {
+        app.notify("Saved!", "success")
+    } else {
+        app.notify("Please fix the errors below.", "error")
+    }
+}
+
+func build_form() {
+    return ui.form(app, [
+        ui.label("Name", "name"),
+        ui.input_text("name", "Your name", ""),
+        ui.error_for(app, "name"),
+        ui.label("Email", "email"),
+        ui.input_email("email", "you@example.com", ""),
+        ui.error_for(app, "email"),
+        ui.label("Age", "age"),
+        ui.input_number("age", "18", ""),
+        ui.error_for(app, "age"),
+        ui.submit("Save")
+    ], () => {
+        handle_submit()
+    })
+}
+
+app.mount(ui.container([ ui.card([ ui.card_body([ build_form() ]) ]) ]))
+app.run()</code></pre>
+
+        <h4>Rendering Pipeline</h4>
+        <p>Internally, every UI element is just a dict like <code>{ "kind": "el", "tag": "div", "cls": "tk-card", "style": "", "attrs": {}, "children": [...] }</code>. The renderer (<code>_tk_render</code>) walks the tree recursively and produces an HTML string:</p>
+        <ul>
+            <li><code>kind: "text"</code> → html-escaped <code>to_string(value)</code></li>
+            <li><code>kind: "state"</code> → html-escaped <code>to_string(ref.get())</code> (dereferences the StateRef)</li>
+            <li><code>kind: "raw"</code>  → the raw string, NOT escaped (use with care)</li>
+            <li><code>kind: "el"</code>   → <code>&lt;tag class="..." style="..." attrs&gt;children&lt;/tag&gt;</code>; void tags (<code>input</code>, <code>br</code>, <code>hr</code>, <code>img</code>, <code>meta</code>) are self-closing</li>
+            <li><code>kind: "error_slot"</code> / <code>kind: "notice_slot"</code> → renders the field error / flash notice if present, empty string otherwise</li>
+        </ul>
+        <p>You can build element dicts by hand if you want - <code>UI</code> is just sugar. The full HTML document (with <code>&lt;!DOCTYPE html&gt;</code>, theme CSS, runtime JS for action dispatch, modals, tabs, tooltips, toasts) is assembled by <code>Trucky._render_page()</code> and assigned to <code>response.body</code> when you call <code>app.run()</code> in serve mode.</p>
+
+        <h4>Session & State Persistence</h4>
+        <p>Every visitor gets a <code>trucky_sid</code> cookie (auto-generated on first contact). All state slots are namespaced under <code>&lt;sid&gt;:&lt;key&gt;</code> in the serve-mode server store (<code>server_set</code> / <code>server_get</code>). State therefore persists across page reloads and survives the action POST → re-render cycle, but is isolated per browser session.</p>
+        <p>In script mode (no <code>request</code> / <code>response</code> globals available), <code>Trucky.init()</code> catches the lookup error and sets <code>self._serve_mode = false</code>. <code>app.run()</code> then just prints the rendered tree to stdout - useful for testing layouts from the command line.</p>
+
+        <h4>Theming</h4>
+        <p>Default theme tokens are exposed as CSS custom properties (<code>--tk-primary</code>, <code>--tk-secondary</code>, etc.) on <code>:root</code>. Override them with <code>app.set_theme({ ... })</code> before calling <code>app.run()</code>. The full base stylesheet is generated by <code>_tk_css_base()</code> and uses these variables, so changing one token recolors the entire UI consistently.</p>
     </section>
 
     <section id="internals">
@@ -825,7 +1088,41 @@ response.body = render(app.build_ui())</code></pre>
     </section>
 
     <section id="changelog">
-        <h2>Changelog: 1.5 -> 1.6</h2>
+        <h2>Changelog</h2>
+
+        <h3>1.6 -> 1.6.1 (library & permissions fix-up release)</h3>
+
+        <div class="changelog-item">
+            <span class="changelog-tag tag-fixed">Fixed</span>
+            <strong>File I/O in script mode</strong>
+            - <code>pitruck main.pr</code> used to crash on <code>write_file(...)</code> / <code>read_file(...)</code> with "file write access is not allowed in this context", because the interpreter defaulted to <code>allow_read=allow_write=allow_net=false</code> and the script-run code path never called <code>set_permissions()</code>. The <code>--allow-read</code> / <code>--allow-write</code> flags were only parsed in the <code>--serve</code> branch, so passing them to a plain script run did nothing. Script mode now defaults to fully-allowed; the <code>--allow-*</code> flags are accepted as no-ops for muscle-memory compatibility, and new <code>--deny-read</code> / <code>--deny-write</code> / <code>--deny-net</code> / <code>--deny-all</code> flags let you opt out.
+        </div>
+
+        <div class="changelog-item">
+            <span class="changelog-tag tag-fixed">Fixed</span>
+            <strong>Dot-assignment on dicts (<code>obj.name = value</code>)</strong>
+            - Previously only <code>Instance</code> values supported <code>obj.name = value</code>; assigning to a <code>Dict</code> via dot-notation crashed with "cannot set property 'name' on a non-instance value". This broke the entire <code>std.struct / struct_copy</code> API, since structs are dicts. Dot-assignment now works on dicts the same way bracket-assignment does, mirroring the existing <code>Expr::Get</code> semantics for reads. Error messages also now report the actual type ("cannot set property 'name' on a number value") instead of the opaque "non-instance value".
+        </div>
+
+        <div class="changelog-item">
+            <span class="changelog-tag tag-new">New</span>
+            <strong>Static method lookup on classes</strong>
+            - <code>MyClass.method_name</code> now returns the underlying function value, so you can call class methods statically (e.g. <code>std.os()</code> works if <code>std</code> is a class with an <code>os</code> method). Previously this returned "cannot access property on a non-instance value" because <code>Expr::Get</code> only handled <code>Instance</code> and <code>Dict</code>.
+        </div>
+
+        <div class="changelog-item">
+            <span class="changelog-tag tag-fixed">Fixed</span>
+            <strong>Bundled library restructure (matches the docs)</strong>
+            - The docs claimed <code>bring color</code>, <code>bring math</code>, <code>bring struct</code>, <code>bring system</code>, <code>bring time</code>, but only <code>lib/std.pr</code> and <code>lib/trucky.pr</code> existed, and <code>std.pr</code> wrapped everything inside a <code>class std { ... }</code> so none of the documented bare-function calls actually worked. Now <code>lib/</code> contains the five per-category modules the docs always described, plus <code>std.pr</code> as a meta-module that <code>bring</code>s them all (plus <code>uuid_v4()</code>), plus <code>trucky.pr</code>.
+        </div>
+
+        <div class="changelog-item">
+            <span class="changelog-tag tag-enhanced">Enhanced</span>
+            <strong>Library documentation rewritten</strong>
+            - The "Bundled Libraries" section of the technical reference now matches the actual API surface of every library. The Trucky section in particular was completely wrong before - it described a <code>Signal</code> class, bare <code>el</code>/<code>text</code>/<code>state</code>/<code>render</code> functions, and an <code>App</code> class with methods like <code>load_form</code> / <code>build_ui</code>, none of which exist. The new docs describe the actual <code>Trucky</code>, <code>UI</code>, and <code>StateRef</code> classes, every UI constructor, the rendering pipeline, session persistence, theming, and a complete form-validation example. A new "Quickstart: How To Use Libraries" section at the top calls out the common pitfall that <code>bring foo</code> does NOT create a <code>foo</code> variable.
+        </div>
+
+        <h3>1.5 -> 1.6</h3>
 
         <div class="changelog-item">
             <span class="changelog-tag tag-new">New</span>
